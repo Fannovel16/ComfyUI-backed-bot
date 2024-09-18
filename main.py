@@ -9,6 +9,7 @@ from PIL import Image
 import torch
 import numpy as np
 from io import BytesIO
+import uuid
 
 ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
@@ -85,9 +86,8 @@ def get_hooks(message, parsed_data):
         "AppIO_IntegerInput": SimpleNamespace(execute=handle_integer_input),
     }
     
-
-bot = telebot.TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None) 
-
+telebot.types.Message()
+bot = telebot.TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None)
 @bot.message_handler(func=lambda _: True, content_types=["text", "photo"])
 def main(message):
     chat_id = str(message.chat.id)
@@ -107,9 +107,12 @@ def main(message):
         mm.cleanup_models()
         gc.collect()
         mm.soft_empty_cache()
-    except:
+    except Exception as e:
         import traceback
-        bot.reply_to(message, traceback.format_exc())
+        Path(__file__, '..', 'error_logs', f"{message.chat.id}-{message.from_user.id}-{uuid.uuid4()}.txt") \
+            .resolve() \
+            .write_text(traceback.format_exc(), encoding="utf-8")
+        bot.reply_to(message, str(e))
 
 print("Telegram bot running, listening for all commands")
 bot.polling()

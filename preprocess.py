@@ -9,7 +9,7 @@ def preprocess(hooks):
     preprocessed_dir.mkdir()
     commands = []
     for workflow_py in py_workflows_dir.iterdir():
-        code = workflow_py.read_text()
+        code = workflow_py.read_text(encoding="utf-8")
         code = code.replace("def main():", f"def main(hooks):") \
                     .replace("sys.path.append(comfyui_path)", "sys.path.insert(0, comfyui_path)") \
                     .replace("    import_custom_nodes()", '') \

@@ -3,4 +3,6 @@ preprocessed
 .env
 comfyui.log
 comfyui.*.log
-python_workflows/*
+python_workflows/*.py
+.ipynb_checkpoints
+error_logs/*.txt
