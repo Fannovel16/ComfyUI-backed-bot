@@ -83,8 +83,7 @@ def get_hooks(message, parsed_data):
         "AppIO_ImageOutput": SimpleNamespace(execute=handle_image_output),
         "AppIO_IntegerInput": SimpleNamespace(execute=handle_integer_input),
     }
-    
-telebot.types.Message()
+
 bot = telebot.TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None)
 @bot.message_handler(func=lambda _: True, content_types=["text", "photo"])
 def main(message):
