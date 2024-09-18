@@ -1,0 +1,6 @@
+__pycache__
+temp
+.env
+comfyui.log
+comfyui.*.log
+python_workflows/*
