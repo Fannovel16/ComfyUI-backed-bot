@@ -10,7 +10,7 @@ import torch
 import numpy as np
 from io import BytesIO
 
-ALLOWED_CHAT_IDS = os.environ["ALLOWED_CHAT_IDS"]
+ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
 import preprocessed
 
