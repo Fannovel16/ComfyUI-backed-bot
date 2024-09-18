@@ -111,7 +111,7 @@ def main(message):
         error_log_dir = Path(__file__, '..', 'error_logs').resolve()
         error_log_dir.mkdir(exist_ok=True)
         
-        error_log_dir / f"{message.chat.id}-{message.from_user.id}-{date_str}.txt" \
+        Path(error_log_dir, f"{message.chat.id}-{message.from_user.id}-{date_str}.txt") \
             .resolve() \
             .write_text(traceback.format_exc(), encoding="utf-8")
         bot.reply_to(message, str(e))
