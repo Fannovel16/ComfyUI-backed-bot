@@ -10,7 +10,7 @@ from io import BytesIO
 
 ALLOWED_CHAT_IDS = os.environ["ALLOWED_CHAT_IDS"]
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
-import temp
+import preprocessed
 
 def parse_command_string(command_string, command_name):
     textAndArgs = command_string[1+ len(command_name):].strip().split('--')
@@ -99,7 +99,7 @@ def main(message):
     try:
         parsed_data = parse_command_string(text, command_name)
         hooks = get_hooks(message, parsed_data)
-        getattr(temp, command_name)(hooks)
+        getattr(preprocessed, command_name)(hooks)
     except:
         import traceback
         bot.reply_to(message, traceback.format_exc())

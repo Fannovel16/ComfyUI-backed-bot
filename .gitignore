@@ -1,5 +1,5 @@
 __pycache__
-temp
+preprocessed
 .env
 comfyui.log
 comfyui.*.log
