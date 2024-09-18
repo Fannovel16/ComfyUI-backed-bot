@@ -1,8 +1,8 @@
 from pathlib import Path
 import shutil
-py_workflows_dir = Path(__file__, '..' , 'python_workflows')
+py_workflows_dir = Path(__file__, '..' , 'python_workflows').resolve()
 py_workflows_dir.mkdir(exist_ok=True)
-preprocessed_dir = Path(__file__, '..', 'preprocessed')
+preprocessed_dir = Path(__file__, '..', 'preprocessed').resolve()
 
 def preprocess(hooks):
     shutil.rmtree(preprocessed_dir, ignore_errors=True)
