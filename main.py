@@ -39,8 +39,6 @@ def parse_command_string(command_string, command_name):
 def get_hooks(message, parsed_data):
     global bot
     def handle_string_input(required, string, argument_name):
-        if argument_name not in parsed_data:
-            raise RuntimeError(f"Missing argument --{argument_name}")
         if required and argument_name not in parsed_data:
             if argument_name == "prompt": raise RuntimeError("A prompt is required")
             else: raise RuntimeError(f"Argument --{argument_name} is required")
