@@ -1,3 +1,5 @@
+import sys, os
+sys.path.insert(0, os.path.realpath(os.path.join(__file__, '..')))
 from preprocess import preprocess
 import dotenv;dotenv.load_dotenv()
 import telebot, os
