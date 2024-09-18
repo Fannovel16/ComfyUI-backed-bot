@@ -105,8 +105,13 @@ def main(message):
         gc.collect()
         mm.soft_empty_cache()
     except Exception as e:
-        import traceback
-        Path(__file__, '..', 'error_logs', f"{message.chat.id}-{message.from_user.id}-{uuid.uuid4()}.txt") \
+        import traceback, datetime
+        utc_time = datetime.datetime.now(datetime.timezone.utc)
+        date_str = utc_time.strftime("%Y-%m-%d %H.%M.%S")
+        error_log_dir = Path(__file__, '..', 'error_logs').resolve()
+        error_log_dir.mkdir(exist_ok=True)
+        
+        error_log_dir / f"{message.chat.id}-{message.from_user.id}-{date_str}.txt" \
             .resolve() \
             .write_text(traceback.format_exc(), encoding="utf-8")
         bot.reply_to(message, str(e))
