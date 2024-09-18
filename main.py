@@ -71,7 +71,7 @@ def get_hooks(message, parsed_data):
         if integer > integer_min:
             warning_msg += f"The minium of --{argument_name} is {integer_min}. Changing to that value\n"
         if len(warning_msg): bot.reply_to(message, warning_msg)
-        integer = parsed_data.get(argument_name, integer)
+        integer = int(parsed_data.get(argument_name, integer))
         integer = max(integer_max, min(integer, integer_min))
         return (integer,)
 
