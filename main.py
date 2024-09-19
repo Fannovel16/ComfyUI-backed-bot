@@ -9,7 +9,7 @@ import threading
 
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
 ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
-ALLOWED_USERNAMES = os.environ.get("ALLOWED_USERNAMES", '')
+ALLOWED_USER_IDS = os.environ.get("ALLOWED_USER_IDS", '')
 
 def parse_command_string(command_string, command_name):
     textAndArgs = command_string[1+ len(command_name):].strip().split('--')
@@ -35,13 +35,13 @@ worker = ComfyWorker(bot)
 @bot.message_handler(func=lambda _: True, content_types=["text", "photo"])
 def main(message: telebot.types.Message):
     chat_id = str(message.chat.id)
-    user_name = str(message.from_user.username)
+    user_id = str(message.from_user.id)
 
     if len(ALLOWED_CHAT_IDS.strip()) and chat_id not in ALLOWED_CHAT_IDS:
         print(f"Allowed chatids are: {ALLOWED_CHAT_IDS}, but got message from user: {message.from_user.username}, chatid: {chat_id} ! Skipping message.")
         return
-    if len(ALLOWED_USERNAMES.strip()) and user_name not in ALLOWED_USERNAMES:
-        print(f"Allowed usernames are: {ALLOWED_USERNAMES}, but got message from user: {message.from_user.username}, chatid: {chat_id} ! Skipping message.")
+    if len(ALLOWED_USER_IDS.strip()) and user_id not in ALLOWED_USER_IDS:
+        print(f"Allowed userids are: {ALLOWED_USER_IDS}, but got message from user: {message.from_user.username} ({user_id}), chatid: {chat_id} ! Skipping message.")
         return
     
     text = message.caption if message.content_type == 'photo' else message.text
