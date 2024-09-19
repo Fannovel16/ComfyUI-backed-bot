@@ -9,6 +9,7 @@ def preprocess(hooks):
     preprocessed_dir.mkdir()
     commands = []
     for workflow_py in py_workflows_dir.iterdir():
+        if workflow_py.name.startswith('.'): continue #E.g. .ipynb_checkpoints
         code = workflow_py.read_text(encoding="utf-8")
         code = code.replace("def main():", f"def main(hooks):") \
                     .replace("sys.path.append(comfyui_path)", "sys.path.insert(0, comfyui_path)") \
