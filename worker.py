@@ -115,7 +115,6 @@ class ComfyWorker:
             command_name, message, parsed_data = self.data.popleft()
             hooks = create_hooks(self.bot, message, parsed_data)
             try:
-                time.sleep(10)
                 getattr(preprocessed, command_name)(hooks)
                 mm.cleanup_models()
                 gc.collect()
