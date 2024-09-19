@@ -10,12 +10,45 @@ from collections import deque
 import traceback, datetime
 from pathlib import Path
 import threading
+import telebot, typing
 
 ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
 import preprocessed
 import comfy.model_management as mm
 import gc
+
+def get_username(user: telebot.types.User):
+    if user.username is not None: 
+        return user.username
+    return user.first_name
+
+def telegram_reply_to(bot: telebot.TeleBot, message: telebot.types.Message, text_or_photo: typing.Union[typing.LiteralString, BytesIO]):
+    full_command = message.caption if message.content_type == 'photo' else message.text
+    if full_command is None: full_command = ''
+    if isinstance(text_or_photo, str):
+        text = text_or_photo
+        try: bot.reply_to(message, text)
+        except: bot.send_message(
+            message.chat.id,
+            f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Result of `{full_command}`:\n{text}", 
+            parse_mode="Markdown"
+        )
+    else:
+        photo = text_or_photo
+        try: bot.send_photo(message.chat.id, photo, reply_to_message_id=message.id)
+        except:
+            try: bot.send_photo(
+                message.chat.id, 
+                photo, 
+                caption=f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Result of `{full_command}`", 
+                parse_mode="Markdown"
+            )
+            except: bot.send_message(
+                message.chat.id, 
+                f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Can't get image from `{full_command}`. Try again.", 
+                parse_mode="Markdown"
+            )
 
 def create_hooks(bot, message, parsed_data):
     def handle_string_input(required, string, argument_name):
@@ -27,7 +60,7 @@ def create_hooks(bot, message, parsed_data):
     def handle_string_output(string):
         if len(string.strip()) == 0:
             raise RuntimeError(f"String passed to StringOutput node must not be empty")
-        bot.reply_to(message, string)
+        telegram_reply_to(bot, message, string)
 
     def handle_image_input(**kwargs):
         if message.content_type != "photo":
@@ -41,7 +74,7 @@ def create_hooks(bot, message, parsed_data):
         image_bytes = BytesIO()
         image_pil.save(image_bytes, format="PNG")
         image_bytes.seek(0)
-        bot.send_photo(message.chat.id, image_bytes, reply_to_message_id=message.id)
+        telegram_reply_to(bot, message, image_bytes)
     
     def handle_integer_input(required, integer, integer_min, integer_max, argument_name):
         if argument_name not in parsed_data:
@@ -53,7 +86,7 @@ def create_hooks(bot, message, parsed_data):
             warning_msg += f"The minium of --{argument_name} is {integer_min}. Changing to that value\n"
         if integer > integer_min:
             warning_msg += f"The minium of --{argument_name} is {integer_min}. Changing to that value\n"
-        if len(warning_msg): bot.reply_to(message, warning_msg)
+        if len(warning_msg): telegram_reply_to(bot, message, warning_msg)
         integer = int(parsed_data.get(argument_name, integer))
         integer = max(integer_max, min(integer, integer_min))
         return (integer,)
@@ -76,11 +109,13 @@ class ComfyWorker:
         self.data.append((command_name, message, parsed_data))
 
     def loop_thread(self):
+        import time
         while True:
             if not self.data: continue
             command_name, message, parsed_data = self.data.popleft()
             hooks = create_hooks(self.bot, message, parsed_data)
             try:
+                time.sleep(10)
                 getattr(preprocessed, command_name)(hooks)
                 mm.cleanup_models()
                 gc.collect()
@@ -93,6 +128,6 @@ class ComfyWorker:
                 
                 Path(error_log_dir, f"{date_str} {message.chat.id} {message.from_user.id}.txt") \
                     .resolve() \
-                    .write_text(f"Error: {traceback.format_exc()}", encoding="utf-8")
-                self.bot.reply_to(message, str(e))
+                    .write_text(traceback.format_exc(), encoding="utf-8")
+                telegram_reply_to(self.bot, message, f"Error: {str(e)}")
     
