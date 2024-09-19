@@ -45,6 +45,8 @@ def main(message: telebot.types.Message):
         return
     
     text = message.caption if message.content_type == 'photo' else message.text
+    if text is None or len(text.strip()) == 0:
+        return
     command_name = text.strip().split()[0][1:] # Extract command name without '/'
     print(f"Received command from {message.chat.id}: {text}")
     if command_name not in COMMANDS:
