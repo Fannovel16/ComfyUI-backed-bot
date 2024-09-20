@@ -47,14 +47,15 @@ def main(message: telebot.types.Message):
 
     chat_id = str(message.chat.id)
     user_id = str(message.from_user.id)
+    user_name = get_username(message.from_user)
     if len(ALLOWED_CHAT_IDS.strip()) and chat_id not in ALLOWED_CHAT_IDS:
-        print(f"Allowed chatids are: {ALLOWED_CHAT_IDS}, but got message from user: {get_username(message.from_user)}, chatid: {chat_id} ! Skipping message.")
+        print(f"Allowed chatids are: {ALLOWED_CHAT_IDS}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message.")
         return
     if len(ALLOWED_USER_IDS.strip()) and user_id not in ALLOWED_USER_IDS:
-        print(f"Allowed userids are: {ALLOWED_USER_IDS}, but got message from user: {get_username(message.from_user)} ({user_id}), chatid: {chat_id} ! Skipping message.")
+        print(f"Allowed userids are: {ALLOWED_USER_IDS}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message.")
         return
     
-    print(f"Received command from {message.chat.id}: {text}")
+    print(f"Received command from chat_id {message.chat.id}, user {user_name} ({user_id}): {text}")
     if command_name not in COMMANDS:
         print(f"Command {command_name} not defined. Current available commands: {', '.join(COMMANDS)}")
         return
