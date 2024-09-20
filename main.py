@@ -36,6 +36,11 @@ def get_username(user: telebot.types.User):
 
 bot = telebot.TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None)
 worker = ComfyWorker(bot)
+
+@bot.message_handler(["get_ids"])
+def get_ids(message: telebot.types.Message):
+    bot.reply_to(message, f"Chat ID: {message.chat.id}, User ID: {message.from_user.id}")
+
 @bot.message_handler(func=lambda _: True, content_types=["text", "photo"])
 def main(message: telebot.types.Message):
     text = message.caption if message.content_type == 'photo' else message.text
@@ -44,7 +49,8 @@ def main(message: telebot.types.Message):
     text = text.strip()
     if text[0] != '/': return
     command_name = text.strip().split()[0][1:] # Extract command name without '/'
-
+    if command_name == "get_ids":
+        return
     chat_id = str(message.chat.id)
     user_id = str(message.from_user.id)
     user_name = get_username(message.from_user)
