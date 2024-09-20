@@ -21,7 +21,7 @@ def preprocess(hooks):
         temp_file.write_text(code)
         commands.append(workflow_py.stem)
     init_file = preprocessed_dir / "__init__.py"
-    init_file.write_text('\n'.join([f"from .appio_{command} import main as {command}" for command in commands]))
+    init_file.write_text('\n'.join([f"from .appio_{command} import main as {command}" for command in commands]), encoding="utf-8")
     return commands
 
 if __name__ == "__main__":

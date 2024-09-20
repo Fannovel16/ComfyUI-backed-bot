@@ -23,7 +23,7 @@ def get_username(user: telebot.types.User):
         return user.username
     return user.first_name
 
-def telegram_reply_to(bot: telebot.TeleBot, message: telebot.types.Message, text_or_photo: typing.Union[typing.LiteralString, BytesIO]):
+def telegram_reply_to(bot: telebot.TeleBot, message: telebot.types.Message, text_or_photo: typing.Union[str, BytesIO]):
     full_command = message.caption if message.content_type == 'photo' else message.text
     if full_command is None: full_command = ''
     if isinstance(text_or_photo, str):
