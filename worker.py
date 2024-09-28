@@ -10,7 +10,7 @@ from collections import deque
 import traceback, datetime
 from pathlib import Path
 import threading
-import telebot, typing
+from utils import telegram_reply_to, get_username, handle_exception, get_dbm
 
 ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
@@ -18,37 +18,8 @@ import preprocessed
 import comfy.model_management as mm
 import gc
 
-def get_username(user: telebot.types.User):
-    if user.username is not None: 
-        return user.username
-    return user.first_name
-
-def telegram_reply_to(bot: telebot.TeleBot, message: telebot.types.Message, text_or_photo: typing.Union[str, BytesIO]):
-    full_command = message.caption if message.content_type == 'photo' else message.text
-    if full_command is None: full_command = ''
-    if isinstance(text_or_photo, str):
-        text = text_or_photo
-        try: bot.reply_to(message, text)
-        except: bot.send_message(
-            message.chat.id,
-            f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Result of `{full_command}`:\n{text}", 
-            parse_mode="Markdown"
-        )
-    else:
-        photo = text_or_photo
-        try: bot.send_photo(message.chat.id, photo, reply_to_message_id=message.id)
-        except:
-            try: bot.send_photo(
-                message.chat.id, 
-                photo, 
-                caption=f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Result of `{full_command}`", 
-                parse_mode="Markdown"
-            )
-            except: bot.send_message(
-                message.chat.id, 
-                f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Can't get image from `{full_command}`. Try again.", 
-                parse_mode="Markdown"
-            )
+def get_full_image_id(user_id, image_id):
+    return f"{user_id}:{image_id}"
 
 def create_hooks(bot, message, parsed_data):
     def handle_string_input(required, string, argument_name):
@@ -68,6 +39,20 @@ def create_hooks(bot, message, parsed_data):
         file_info = bot.get_file(max(message.photo, key=lambda p:p.width).file_id)
         img = Image.open(BytesIO(bot.download_file(file_info.file_path)))
         return (torch.from_numpy(np.array(img)[:, :, :3]/255.).unsqueeze(0),)
+    
+    def handle_image_input_from_id(argument_name):
+        _image_id = parsed_data.get(argument_name, '') or ''
+        if len(_image_id) == 0:
+            raise RuntimeError(f"Argument --{argument_name} is required, with the value being image id")
+        
+        with get_dbm("image_ids") as image_ids:
+            image_id = get_full_image_id(message.from_user.id, _image_id)
+            if image_id not in image_ids:
+                raise RuntimeError(f"Image_id {_image_id} isn't set for user {get_username(message.from_user)} ({message.from_user.id}). Run `/set_image_id {_image_id}` with a photo")
+            file_id = image_ids[image_id]
+            file_info = bot.get_file(file_id)
+            img = Image.open(BytesIO(bot.download_file(file_info.file_path)))
+            return (torch.from_numpy(np.array(img)[:, :, :3]/255.).unsqueeze(0),)
     
     def handle_image_output(image):
         image_pil = Image.fromarray(image[0, :, :, :3].cpu().numpy().__mul__(255.).astype(np.uint8))
@@ -97,6 +82,7 @@ def create_hooks(bot, message, parsed_data):
         "AppIO_ImageInput": SimpleNamespace(execute=handle_image_input),
         "AppIO_ImageOutput": SimpleNamespace(execute=handle_image_output),
         "AppIO_IntegerInput": SimpleNamespace(execute=handle_integer_input),
+        "AppIO_ImageInputFromID": SimpleNamespace(execute=handle_image_input_from_id)
     }
 
 class ComfyWorker:
@@ -120,13 +106,5 @@ class ComfyWorker:
                 gc.collect()
                 mm.soft_empty_cache()
             except Exception as e:
-                utc_time = datetime.datetime.now(datetime.timezone.utc)
-                date_str = utc_time.strftime("%d-%m-%Y_%H.%M.%S")
-                error_log_dir = Path(__file__, '..', 'error_logs').resolve()
-                error_log_dir.mkdir(exist_ok=True)
-                
-                Path(error_log_dir, f"{date_str} {message.chat.id} {message.from_user.id}.txt") \
-                    .resolve() \
-                    .write_text(traceback.format_exc(), encoding="utf-8")
-                telegram_reply_to(self.bot, message, f"Error: {str(e)}")
+                handle_exception(self.bot, message, e, traceback.format_exc())
     

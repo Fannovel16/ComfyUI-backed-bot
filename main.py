@@ -3,10 +3,12 @@ sys.path.insert(0, os.path.realpath(os.path.join(__file__, '..')))
 from preprocess import preprocess
 import dotenv;dotenv.load_dotenv()
 import telebot, os
-from pathlib import Path
 from worker import ComfyWorker
+from utils import get_username
+from special_commands import SPECIAL_COMMANDS
 
-COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
+COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput", "AppIO_ImageInputFromID"])
+COMMANDS.extend(SPECIAL_COMMANDS.keys())
 ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
 ALLOWED_USER_IDS = os.environ.get("ALLOWED_USER_IDS", '')
 
@@ -28,11 +30,6 @@ def parse_command_string(command_string, command_name):
             result[arg_name] = arg_value
 
     return result
-
-def get_username(user: telebot.types.User):
-    if user.username is not None: 
-        return user.username
-    return user.first_name
 
 bot = telebot.TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None)
 worker = ComfyWorker(bot)
@@ -66,7 +63,8 @@ def main(message: telebot.types.Message):
         print(f"Command {command_name} not defined. Current available commands: {', '.join(COMMANDS)}")
         return
     parsed_data = parse_command_string(text, command_name)
-    worker.execute(command_name, message, parsed_data)
+    if command_name in SPECIAL_COMMANDS: SPECIAL_COMMANDS[command_name](bot, message, parsed_data)
+    else: worker.execute(command_name, message, parsed_data)
 
 print("Telegram bot running, listening for all commands")
 bot.polling()

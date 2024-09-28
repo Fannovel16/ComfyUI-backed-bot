@@ -5,8 +5,8 @@ py_workflows_dir.mkdir(exist_ok=True)
 preprocessed_dir = Path(__file__, '..', 'preprocessed').resolve()
 
 def preprocess(hooks):
-    shutil.rmtree(preprocessed_dir, ignore_errors=True)
-    preprocessed_dir.mkdir()
+    #shutil.rmtree(preprocessed_dir, ignore_errors=True)
+    preprocessed_dir.mkdir(exist_ok=True)
     commands = []
     for workflow_py in py_workflows_dir.iterdir():
         if workflow_py.name.startswith('.'): continue #E.g. .ipynb_checkpoints
@@ -18,7 +18,7 @@ def preprocess(hooks):
         for hooker in hooks:
             code = code.replace(f'NODE_CLASS_MAPPINGS["{hooker}"]()', f'hooks["{hooker}"]')
         temp_file = preprocessed_dir / f"appio_{workflow_py.name}"
-        temp_file.write_text(code)
+        #temp_file.write_text(code)
         commands.append(workflow_py.stem)
     init_file = preprocessed_dir / "__init__.py"
     init_file.write_text('\n'.join([f"from .appio_{command} import main as {command}" for command in commands]), encoding="utf-8")

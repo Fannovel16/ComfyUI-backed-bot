@@ -6,3 +6,4 @@ comfyui.*.log
 python_workflows/*.py
 .ipynb_checkpoints
 error_logs/*.txt
+dbm_data/*
