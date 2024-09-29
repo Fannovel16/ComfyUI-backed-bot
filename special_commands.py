@@ -1,5 +1,5 @@
 import telebot
-from utils import telegram_reply_to, handle_exception, get_username, get_dbm
+from backed_bot_utils import telegram_reply_to, handle_exception, get_username, get_dbm
 import traceback
 from PIL import Image
 from io import BytesIO

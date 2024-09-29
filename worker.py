@@ -10,7 +10,7 @@ from collections import deque
 import traceback, datetime
 from pathlib import Path
 import threading
-from utils import telegram_reply_to, get_username, handle_exception, get_dbm
+from backed_bot_utils import telegram_reply_to, get_username, handle_exception, get_dbm
 
 ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
