@@ -4,7 +4,7 @@ from preprocess import preprocess
 import dotenv;dotenv.load_dotenv()
 import telebot, os
 from worker import ComfyWorker
-from utils import get_username
+from backed_bot_utils import get_username
 from special_commands import SPECIAL_COMMANDS
 import middlewares, time
 

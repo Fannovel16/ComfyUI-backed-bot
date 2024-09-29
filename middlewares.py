@@ -1,7 +1,7 @@
 from telebot.handler_backends import BaseMiddleware
 from telebot.handler_backends import CancelUpdate
 from telebot.types import Message
-from utils import get_username
+from backed_bot_utils import get_username
 
 class AntiFlood(BaseMiddleware):
     def __init__(self, bot, start_time, window_limit_sec) -> None:
