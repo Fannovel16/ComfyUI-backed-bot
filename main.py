@@ -6,11 +6,13 @@ import telebot, os
 from worker import ComfyWorker
 from utils import get_username
 from special_commands import SPECIAL_COMMANDS
+import middlewares, time
 
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput", "AppIO_ImageInputFromID"])
 COMMANDS.extend(SPECIAL_COMMANDS.keys())
 ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
 ALLOWED_USER_IDS = os.environ.get("ALLOWED_USER_IDS", '')
+MESSAGE_WINDOW_RATE_LIMIT = int(os.environ.get("MESSAGE_WINDOW_RATE_LIMIT", '3'))
 
 def parse_command_string(command_string, command_name):
     textAndArgs = command_string[1+ len(command_name):].strip().split('--')
@@ -31,7 +33,8 @@ def parse_command_string(command_string, command_name):
 
     return result
 
-bot = telebot.TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None)
+bot = telebot.TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None, use_class_middlewares=True)
+bot.setup_middleware(middlewares.AntiFlood(bot, time.time(), MESSAGE_WINDOW_RATE_LIMIT))
 worker = ComfyWorker(bot)
 
 @bot.message_handler(["get_ids"])
