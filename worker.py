@@ -95,7 +95,6 @@ class ComfyWorker:
         self.data.append((command_name, message, parsed_data))
 
     def loop_thread(self):
-        import time
         while True:
             if not self.data: continue
             command_name, message, parsed_data = self.data.popleft()

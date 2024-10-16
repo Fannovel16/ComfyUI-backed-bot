@@ -51,3 +51,22 @@ def get_dbm(db_name):
     dbm_dir = Path(__file__).parent / "dbm_data"
     dbm_dir.mkdir(exist_ok=True)
     return dbm.open(Path(dbm_dir / db_name).resolve(), 'c')
+
+def parse_command_string(command_string, command_name):
+    textAndArgs = command_string[1+ len(command_name):].strip().split('--')
+    result = {}
+    text = textAndArgs[0].strip()
+    args = textAndArgs[1:]
+    print(args)
+    # The first element is the "freeText" part, remove any leading or trailing whitespace.
+    result["prompt"] = text.strip()
+
+    for arg in args:
+        parts = arg.split()
+        if len(parts) > 1:
+            # Extract the argument name and value
+            arg_name = parts[0].strip()
+            arg_value = ' '.join(parts[1:]).strip()
+            result[arg_name] = arg_value
+
+    return result
