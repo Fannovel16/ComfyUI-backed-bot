@@ -1,4 +1,5 @@
-import telebot
+from telebot import types, TeleBot
+from telebot import types
 from backed_bot_utils import telegram_reply_to, handle_exception, get_username, get_dbm
 import traceback
 from PIL import Image
@@ -7,7 +8,7 @@ from io import BytesIO
 def get_full_image_id(user_id, image_id):
     return f"{user_id}:{image_id}"
 
-def set_image_id(bot: telebot.TeleBot, message: telebot.types.Message, parsed_data: dict):
+def set_image_id(bot: TeleBot, message: types.Message, parsed_data: dict):
     if message.content_type != "photo":
         return telegram_reply_to(bot, message, "Command set_image_id expects a photo")
     _image_id = parsed_data.get("prompt", '') or ''
@@ -22,7 +23,7 @@ def set_image_id(bot: telebot.TeleBot, message: telebot.types.Message, parsed_da
     except Exception as e:
         handle_exception(bot, message, e, traceback.format_exc())
 
-def get_image_id(bot, message: telebot.types.Message, parsed_data: dict):
+def get_image_id(bot: TeleBot, message: types.Message, parsed_data: dict):
     _image_id = parsed_data.get("prompt", '') or ''
     if len(_image_id.strip()) == 0:
         return telegram_reply_to(bot, message, "Image id must not be empty for this command")
@@ -42,6 +43,7 @@ def get_image_id(bot, message: telebot.types.Message, parsed_data: dict):
         telegram_reply_to(bot, message, image_bytes)
     except Exception as e:
         handle_exception(bot, message, e, traceback.format_exc())
+
 
 SPECIAL_COMMANDS = {
     "set_image_id": set_image_id,

@@ -1,15 +1,18 @@
-import telebot, typing
+import typing
 import datetime, traceback
 from pathlib import Path
 from io import BytesIO
 import dbm
+from telebot import TeleBot, types
+from contextlib import contextmanager
+import logging
 
-def get_username(user: telebot.types.User):
+def get_username(user: types.User):
     if user.username is not None: 
         return user.username
     return user.first_name
 
-def telegram_reply_to(bot: telebot.TeleBot, message: telebot.types.Message, text_or_photo: typing.Union[str, BytesIO]):
+def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typing.Union[str, BytesIO]):
     full_command = message.caption if message.content_type == 'photo' else message.text
     if full_command is None: full_command = ''
     if isinstance(text_or_photo, str):
@@ -36,7 +39,7 @@ def telegram_reply_to(bot: telebot.TeleBot, message: telebot.types.Message, text
                 parse_mode="Markdown"
             )
 
-def handle_exception(bot: telebot.TeleBot, original_message: telebot.types.Message, e: Exception, full_traceback: str):
+def handle_exception(bot: TeleBot, original_message: types.Message, e: Exception, full_traceback: str):
     utc_time = datetime.datetime.now(datetime.timezone.utc)
     date_str = utc_time.strftime("%d-%m-%Y_%H.%M.%S")
     error_log_dir = Path(__file__, '..', 'error_logs').resolve()
@@ -70,3 +73,27 @@ def parse_command_string(command_string, command_name):
             result[arg_name] = arg_value
 
     return result
+
+# Sauce: https://gist.github.com/simon-weber/7853144
+@contextmanager
+def all_logging_disabled(highest_level=logging.CRITICAL):
+    """
+    A context manager that will prevent any logging messages
+    triggered during the body from being processed.
+    :param highest_level: the maximum logging level in use.
+      This would only need to be changed if a custom level greater than CRITICAL
+      is defined.
+    """
+    # two kind-of hacks here:
+    #    * can't get the highest logging level in effect => delegate to the user
+    #    * can't get the current module-level override => use an undocumented
+    #       (but non-private!) interface
+
+    previous_level = logging.root.manager.disable
+
+    logging.disable(highest_level)
+
+    try:
+        yield
+    finally:
+        logging.disable(previous_level)

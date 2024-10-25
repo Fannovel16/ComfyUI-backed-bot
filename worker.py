@@ -10,18 +10,17 @@ from collections import deque
 import traceback, datetime
 from pathlib import Path
 import threading
-from backed_bot_utils import telegram_reply_to, get_username, handle_exception, get_dbm
+from backed_bot_utils import telegram_reply_to, get_username, handle_exception, get_dbm, all_logging_disabled
 
 ALLOWED_CHAT_IDS = os.environ.get("ALLOWED_CHAT_IDS", '')
 COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput"])
-import preprocessed
-import comfy.model_management as mm
 import gc
+from telebot import types, TeleBot
 
 def get_full_image_id(user_id, image_id):
     return f"{user_id}:{image_id}"
 
-def create_hooks(bot, message, parsed_data):
+def create_hooks(bot: TeleBot, message: types.Message, parsed_data: dict):
     def handle_string_input(required, string, argument_name):
         if required and argument_name not in parsed_data:
             if argument_name == "prompt": raise RuntimeError("A prompt is required")
@@ -45,14 +44,18 @@ def create_hooks(bot, message, parsed_data):
         if len(_image_id) == 0:
             raise RuntimeError(f"Argument --{argument_name} is required, with the value being image id")
         
-        with get_dbm("image_ids") as image_ids:
-            image_id = get_full_image_id(message.from_user.id, _image_id)
-            if image_id not in image_ids:
-                raise RuntimeError(f"Image_id {_image_id} isn't set for user {get_username(message.from_user)} ({message.from_user.id}). Run `/set_image_id {_image_id}` with a photo")
-            file_id = image_ids[image_id]
-            file_info = bot.get_file(file_id)
-            img = Image.open(BytesIO(bot.download_file(file_info.file_path)))
-            return (torch.from_numpy(np.array(img)[:, :, :3]/255.).unsqueeze(0),)
+        if _image_id.startswith("TG-"):
+            file_info = bot.get_file(_image_id[len("TG-"):])
+        else:
+            with get_dbm("image_ids") as image_ids:
+                image_id = get_full_image_id(message.from_user.id, _image_id)
+                if image_id not in image_ids:
+                    raise RuntimeError(f"Image_id {_image_id} isn't set for user {get_username(message.from_user)} ({message.from_user.id}). Run `/set_image_id {_image_id}` with a photo")
+                file_id = image_ids[image_id]
+                file_info = bot.get_file(file_id)
+
+        img = Image.open(BytesIO(bot.download_file(file_info.file_path)))
+        return (torch.from_numpy(np.array(img)[:, :, :3]/255.).unsqueeze(0),)
     
     def handle_image_output(image):
         image_pil = Image.fromarray(image[0, :, :, :3].cpu().numpy().__mul__(255.).astype(np.uint8))
@@ -70,7 +73,7 @@ def create_hooks(bot, message, parsed_data):
         if integer < integer_min:
             warning_msg += f"The minium of --{argument_name} is {integer_min}. Changing to that value\n"
         if integer > integer_min:
-            warning_msg += f"The minium of --{argument_name} is {integer_min}. Changing to that value\n"
+            warning_msg += f"The maximum of --{argument_name} is {integer_min}. Changing to that value\n"
         if len(warning_msg): telegram_reply_to(bot, message, warning_msg)
         integer = int(parsed_data.get(argument_name, integer))
         integer = max(integer_max, min(integer, integer_min))
@@ -91,13 +94,17 @@ class ComfyWorker:
         self.bot = bot
         threading.Thread(target=self.loop_thread, daemon=True).start()
     
-    def execute(self, command_name, message, parsed_data):
-        self.data.append((command_name, message, parsed_data))
+    def execute(self, command_name, message, parsed_data, callback=None):
+        self.data.append((command_name, message, parsed_data, callback))
 
     def loop_thread(self):
+        with all_logging_disabled():
+            import preprocessed
+            import comfy.model_management as mm
+        print("Telegram bot running, listening for all commands")
         while True:
             if not self.data: continue
-            command_name, message, parsed_data = self.data.popleft()
+            command_name, message, parsed_data, callback = self.data.popleft()
             hooks = create_hooks(self.bot, message, parsed_data)
             try:
                 getattr(preprocessed, command_name)(hooks)
@@ -106,4 +113,6 @@ class ComfyWorker:
                 mm.soft_empty_cache()
             except Exception as e:
                 handle_exception(self.bot, message, e, traceback.format_exc())
-    
+            finally:
+                if callback is not None:
+                    callback()
