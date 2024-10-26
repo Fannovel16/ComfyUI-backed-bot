@@ -37,7 +37,7 @@ def create_hooks(bot: TeleBot, message: types.Message, parsed_data: dict, image_
             raise RuntimeError(f"This command requires an image")
         file_info = bot.get_file(max(message.photo, key=lambda p:p.width).file_id)
         img = Image.open(BytesIO(bot.download_file(file_info.file_path)))
-        return (torch.from_numpy(np.array(img)[:, :, :3]/255.).unsqueeze(0),)
+        return (torch.from_numpy(np.array(img)[:, :, :3]/255.).float().unsqueeze(0),)
     
     def handle_image_input_from_id(argument_name):
         _image_id = parsed_data.get(argument_name, '') or ''
