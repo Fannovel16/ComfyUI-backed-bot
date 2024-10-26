@@ -6,7 +6,7 @@ from preprocess import preprocess
 from worker import ComfyWorker
 from backed_bot_utils import parse_command_string
 from special_commands import SPECIAL_COMMANDS
-from telebot import types, TeleBot
+from telebot import types, TeleBot, logger, logging
 from image_menu import ImageMenu
 import middlewares, time, threading, schedule
 
@@ -30,6 +30,7 @@ def remove_message_loop():
     continuous_thread.start()
 
 remove_message_loop()
+logger.setLevel(logging.DEBUG)
 bot = TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None, use_class_middlewares=True)
 bot.setup_middleware(middlewares.AntiFlood(
     bot=bot,
