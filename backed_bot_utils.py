@@ -5,12 +5,17 @@ from io import BytesIO
 import dbm
 from telebot import TeleBot, types
 from contextlib import contextmanager
-import logging
+import logging, unicodedata
 
 def get_username(user: types.User):
-    if user.username is not None: 
-        return user.username
-    return user.first_name
+    name = None
+    if user.username is not None: name = user.username
+    else: user.full_name
+    if name is None: name = "Anonymous"
+    name = unicodedata.normalize('NFKD', name) \
+        .encode('ascii', 'ignore').decode("ascii") \
+        .replace('[', '').replace(']', '').replace("@", '')
+    return name
 
 def mention(user: types.User):
     return f"[@{get_username(user)}](tg://user?id={user.id}) (user id: {user.id})"

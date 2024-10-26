@@ -61,7 +61,7 @@ class ImageMenu:
         reply_text = concat_strings(
             mention(message.from_user),
             "IMAGE MENU",
-            f"Current prompt: {pmc.prompt}",
+            f"Current prompt: `{pmc.prompt.replace('`', '')}`",
             "Choose a command. This menu will be deleted automatically after 30s"
         )
         reply_message = bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
@@ -73,15 +73,22 @@ class ImageMenu:
         schedule.every(30).seconds.do(delete_message)
 
     def finish(self, pmc: PhotoMessageChain, user_id, serialized_form, image_bytes):
-        finish_text = concat_strings(
+        finish_text_simple = concat_strings(
+            mention(pmc.orig_message.from_user)
+        )
+        finish_text_full = concat_strings(
             mention(pmc.orig_message.from_user),
             title_pad(),
             serialized_form,
             sep()
         )
-        finish_message = self.bot.send_photo(pmc.orig_message.chat.id, image_bytes, finish_text, reply_to_message_id=pmc.orig_message.id, parse_mode="Markdown")
+        finish_message = self.bot.send_photo(pmc.orig_message.chat.id, image_bytes, finish_text_simple, reply_to_message_id=pmc.orig_message.id, parse_mode="Markdown")
         if SECRET_MONITOR_ROOM is not None:
-            self.bot.forward_message(SECRET_MONITOR_ROOM, finish_message.chat.id, finish_message.id, disable_notification=True, protect_content=True)
+            self.bot.send_photo(
+                SECRET_MONITOR_ROOM,
+                min(finish_message.photo, key=lambda p:p.width).file_id,
+                finish_text_full
+            )
         pmc.delete_siblings(user_id)
 
     def create_handlers(self):
