@@ -30,7 +30,7 @@ def remove_message_loop():
     continuous_thread.start()
 
 remove_message_loop()
-if "--enbale-telebot-debug" in sys.argv:
+if int(os.environ.get("TELEBOT_DEBUG", "0")):
     logger.setLevel(logging.DEBUG)
 bot = TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None, use_class_middlewares=True)
 bot.setup_middleware(middlewares.AntiFlood(
