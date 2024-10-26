@@ -70,7 +70,6 @@ class ImageMenu:
         def delete_message():
             try: bot.delete_message(reply_message.chat.id, reply_message.id)
             except: pass
-        bot.edit_message_reply_markup()
         schedule.every(30).seconds.do(delete_message)
 
     def finish(self, pmc: PhotoMessageChain, user_id, serialized_form, image_bytes):
