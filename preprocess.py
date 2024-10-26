@@ -67,14 +67,14 @@ def analyze_argument_from_preprocessed():
         command_input_nodes[workflow_py.stem.replace("appio_", '')] = get_input_nodes(workflow_py.read_text(encoding="utf-8"))
     return command_input_nodes
 
-def serialize_input_nodes(command: str, id: str, input_nodes: list[InputNode]):
+def serialize_input_nodes(command: str, id: str, prompt: str, input_nodes: list[InputNode]):
     argument_types = {
         "AppIO_StringInput": "String", 
         "AppIO_IntegerInput": "Integer", 
         "AppIO_ImageInput": "Photo", 
         "AppIO_ImageInputFromID": "Photo"
     }
-    re = {"String command": command, "String id": id}
+    re = {"String command": command, "String id": id, "String prompt": prompt}
     for input_node in input_nodes:
         arguments = input_node.arguments
         class_name = input_node.class_name.replace('"', '').replace("'", '')
@@ -83,6 +83,8 @@ def serialize_input_nodes(command: str, id: str, input_nodes: list[InputNode]):
             default_value = default_value or arguments.get("integer", 1)
             
             argument_name = input_node.arguments["argument_name"].replace('"', '').replace("'", '')
+            if argument_name == "prompt":
+                continue
             argument_type = argument_types.get(class_name, None)
             if (argument_type is None):
                 raise NotImplementedError(f"Not found argument type for class {class_name}")

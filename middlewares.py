@@ -1,6 +1,7 @@
 from telebot.handler_backends import BaseMiddleware, CancelUpdate, ContinueHandling
 from telebot import types, TeleBot
 from backed_bot_utils import get_username
+import schedule
 
 class AntiFlood(BaseMiddleware):
     def __init__(self, bot, commands, free_commands, allowed_chat_ids, allowed_user_ids, start_time, window_limit_sec, temp_message_delay_sec) -> None:
@@ -33,8 +34,11 @@ class AntiFlood(BaseMiddleware):
         if message.date - last_message_date < self.limit:
             if (notify_message_date is None) or (message.date - notify_message_date > self.temp_message_delay_sec):
                 notify_message = self.bot.send_message(message.chat.id, f"You are spamming requests. Wait for {self.limit} seconds")
+                def delete_message():
+                    try: self.bot.delete_message(notify_message.chat.id, notify_message.id)
+                    except: pass
                 notify_message_date = notify_message.date
-                self.bot.delete_message(notify_message.chat.id, notify_message.id, self.temp_message_delay_sec)
+                schedule.every(self.temp_message_delay_sec).seconds.do(delete_message)
             self.last_time[user_id] = (message.date, notify_message_date)
             return CancelUpdate()
         else:
@@ -58,7 +62,7 @@ class AntiFlood(BaseMiddleware):
         
         text = message.caption if message.content_type == 'photo' else message.text
         if text is None or len(text.strip()) == 0:
-            return CancelUpdate()
+            return ContinueHandling() if message.content_type == 'photo' else CancelUpdate()
         text = text.strip()
         if text[0] != '/': return CancelUpdate()
         command_name = text.strip().split()[0][1:] # Extract command name without '/'

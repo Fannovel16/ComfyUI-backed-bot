@@ -12,6 +12,9 @@ def get_username(user: types.User):
         return user.username
     return user.first_name
 
+def mention(user: types.User):
+    return f"[@{get_username(user)}](tg://user?id={user.id}) (user id: {user.id})"
+
 def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typing.Union[str, BytesIO]):
     full_command = message.caption if message.content_type == 'photo' else message.text
     if full_command is None: full_command = ''
@@ -20,7 +23,7 @@ def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typin
         try: bot.reply_to(message, text)
         except: bot.send_message(
             message.chat.id,
-            f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Result of `{full_command}`:\n{text}", 
+            f"{mention(message.from_user)} Result of `{full_command}`:\n{text}", 
             parse_mode="Markdown"
         )
     else:
@@ -30,12 +33,12 @@ def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typin
             try: bot.send_photo(
                 message.chat.id, 
                 photo, 
-                caption=f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Result of `{full_command}`", 
+                caption=f"[@{mention(message.from_user)} Result of `{full_command}`", 
                 parse_mode="Markdown"
             )
             except: bot.send_message(
                 message.chat.id, 
-                f"[@{get_username(message.from_user)}](tg://user?id={message.from_user.id}) Can't get image from `{full_command}`. Try again.", 
+                f"[@{mention(message.from_user)} Can't get image from `{full_command}`. Try again.", 
                 parse_mode="Markdown"
             )
 

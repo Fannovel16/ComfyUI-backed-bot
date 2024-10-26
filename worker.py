@@ -20,7 +20,7 @@ from telebot import types, TeleBot
 def get_full_image_id(user_id, image_id):
     return f"{user_id}:{image_id}"
 
-def create_hooks(bot: TeleBot, message: types.Message, parsed_data: dict):
+def create_hooks(bot: TeleBot, message: types.Message, parsed_data: dict, image_output_callback):
     def handle_string_input(required, string, argument_name):
         if required and argument_name not in parsed_data:
             if argument_name == "prompt": raise RuntimeError("A prompt is required")
@@ -62,7 +62,10 @@ def create_hooks(bot: TeleBot, message: types.Message, parsed_data: dict):
         image_bytes = BytesIO()
         image_pil.save(image_bytes, format="PNG")
         image_bytes.seek(0)
-        telegram_reply_to(bot, message, image_bytes)
+        if image_output_callback is not None:
+            image_output_callback(image_bytes)
+        else:
+            telegram_reply_to(bot, message, image_bytes)
     
     def handle_integer_input(required, integer, integer_min, integer_max, argument_name):
         if argument_name not in parsed_data:
@@ -104,8 +107,9 @@ class ComfyWorker:
         print("Telegram bot running, listening for all commands")
         while True:
             if not self.data: continue
-            command_name, message, parsed_data, callback = self.data.popleft()
-            hooks = create_hooks(self.bot, message, parsed_data)
+            command_name, message, parsed_data, image_output_callback = self.data.popleft()
+            parsed_data["prompt"] = parsed_data["prompt"].replace("''", '')
+            hooks = create_hooks(self.bot, message, parsed_data, image_output_callback)
             try:
                 getattr(preprocessed, command_name)(hooks)
                 mm.cleanup_models()
@@ -113,6 +117,3 @@ class ComfyWorker:
                 mm.soft_empty_cache()
             except Exception as e:
                 handle_exception(self.bot, message, e, traceback.format_exc())
-            finally:
-                if callback is not None:
-                    callback()
