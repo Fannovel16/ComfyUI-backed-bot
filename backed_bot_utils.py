@@ -10,15 +10,18 @@ import logging, unicodedata
 def get_username(user: types.User):
     name = None
     if user.username is not None: name = user.username
-    else: user.full_name
+    else: name = user.full_name
     if name is None: name = "Anonymous"
     name = unicodedata.normalize('NFKD', name) \
         .encode('ascii', 'ignore').decode("ascii") \
         .replace('[', '').replace(']', '').replace("@", '')
     return name
 
-def mention(user: types.User):
-    return f"[@{get_username(user)}](tg://user?id={user.id}) (user id: {user.id})"
+def mention(user: types.User, display_user_id=False):
+    if display_user_id:
+        return f"[@{get_username(user)}](tg://user?id={user.id}) (user id: {user.id})"
+    else:
+        return f"[@{get_username(user)}](tg://user?id={user.id})"
 
 def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typing.Union[str, BytesIO]):
     full_command = message.caption if message.content_type == 'photo' else message.text

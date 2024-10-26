@@ -77,7 +77,7 @@ class ImageMenu:
             mention(pmc.orig_message.from_user)
         )
         finish_text_full = concat_strings(
-            mention(pmc.orig_message.from_user),
+            mention(pmc.orig_message.from_user, True),
             title_pad(),
             serialized_form,
             sep()
