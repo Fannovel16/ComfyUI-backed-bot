@@ -146,7 +146,7 @@ class ComfyWorker:
             self_in_frame = frame_info.frame.f_locals.get('self', None)
             if self_in_frame is not None and hasattr(self_in_frame, "FUNCTION"):
                 node_ids = [k for k, v in self.NODE_CLASS_MAPPINGS.items() if v.__name__ == self_in_frame.__class__.__name__]
-                if len(node_ids) and any([node_to_track in node_id for node_id in node_ids for node_to_track in NODES_TO_TRACK_PBAR]):
+                if len(node_ids) and any([node_to_track.lower() in node_id.lower() for node_id in node_ids for node_to_track in NODES_TO_TRACK_PBAR]):
                     node_class = self_in_frame.__class__.__name__
                     break
         
