@@ -59,7 +59,7 @@ def handle_exception(bot: TeleBot, original_message: types.Message, e: Exception
     Path(error_log_dir, f"{date_str} {original_message.chat.id} {original_message.from_user.id}.txt") \
         .resolve() \
         .write_text(traceback.format_exc(), encoding="utf-8")
-    telegram_reply_to(bot, original_message, f"Error ({date_str})")
+    telegram_reply_to(bot, original_message, f"Error ({date_str}). Please retry again")
 
 def get_dbm(db_name):
     dbm_dir = Path(__file__).parent / "dbm_data"

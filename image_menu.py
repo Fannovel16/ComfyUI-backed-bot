@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import os
 from backed_bot_utils import mention
 import schedule
+from io import BytesIO
 
 SECRET_MONITOR_ROOM = os.environ.get("SECRET_MONITOR_ROOM", None)
 
@@ -54,7 +55,7 @@ class ImageMenu:
         markup.add(types.InlineKeyboardButton("close", callback_data=f"close|{id}"))
         reply_text = concat_strings(
             mention(message.from_user),
-            "IMAGE MENU (auto deleted after 30s)",
+            f"IMAGE MENU (auto deleted after 30s) - Prompt: `{pmc.prompt}`",
         )
         reply_message = bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
         pmc.append(reply_message)
@@ -98,7 +99,7 @@ class ImageMenu:
                     form["command"],
                     pmc.orig_message, form, 
                     pbar_message=pbar_message, 
-                    image_output_callback=lambda image_bytes: self.finish(pmc, serialized_form, image_bytes)
+                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
                 )
 
 
@@ -154,11 +155,14 @@ class ImageMenu:
                     pmc.orig_message, 
                     form,
                     pbar_message=pbar_message,
-                    image_output_callback=lambda image_bytes: self.finish(pmc, serialized_form, image_bytes)
+                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
                 )
     
-    def send_photo(self, orig_message, image_bytes, caption):
-        try: 
+    def send_photo(self, orig_message, image_pil, caption):
+        try:
+            image_bytes = BytesIO()
+            image_pil.save(image_bytes, format="PNG")
+            image_bytes.seek(0)
             return self.bot.send_photo(
                 orig_message.chat.id, 
                 image_bytes, 
@@ -167,6 +171,9 @@ class ImageMenu:
                 parse_mode="Markdown"
             )
         except:
+            image_bytes = BytesIO()
+            image_pil.save(image_bytes, format="PNG")
+            image_bytes.seek(0)
             return self.bot.send_photo(
                 orig_message.chat.id, 
                 image_bytes, 
@@ -174,9 +181,9 @@ class ImageMenu:
                 parse_mode="Markdown"
             )
 
-    def finish(self, pmc: PhotoMessageChain, serialized_form, image_bytes):
+    def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
         finish_text_simple = mention(pmc.orig_message.from_user)
-        finish_message = self.send_photo(pmc.orig_message, image_bytes, finish_text_simple)
+        finish_message = self.send_photo(pmc.orig_message, image_pil, finish_text_simple)
         pmc.delete()
         
         if SECRET_MONITOR_ROOM is not None:

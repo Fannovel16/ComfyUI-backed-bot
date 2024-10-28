@@ -60,12 +60,12 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
     
     def handle_image_output(image):
         image_pil = Image.fromarray(image[0, :, :, :3].cpu().numpy().__mul__(255.).astype(np.uint8))
-        image_bytes = BytesIO()
-        image_pil.save(image_bytes, format="PNG")
-        image_bytes.seek(0)
         if image_output_callback is not None:
-            image_output_callback(image_bytes)
+            image_output_callback(image_pil)
         else:
+            image_bytes = BytesIO()
+            image_pil.save(image_bytes, format="PNG")
+            image_bytes.seek(0)
             telegram_reply_to(self.bot, message, image_bytes)
     
     def handle_integer_input(required, integer, integer_min, integer_max, argument_name):
