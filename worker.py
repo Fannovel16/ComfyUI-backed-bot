@@ -19,6 +19,7 @@ def get_full_image_id(user_id, image_id):
 NODES_TO_CACHE = os.environ.get("NODES_TO_CACHE", '')
 NODE_OUTPUT_CACHES = {}
 NODES_TO_TRACK_PBAR = os.environ.get("NODES_TO_TRACK_PBAR", '')
+TELEBOT_DEBUG = int(os.environ.get("TELEBOT_DEBUG", "0"))
 
 def create_hooks(self, message: types.Message, parsed_data: dict, image_output_callback):
     def handle_string_input(required, string, argument_name):
@@ -116,9 +117,11 @@ class NodeProgressBar:
         self.orig_text = message.text
         self.node_class = node_class
         self.stream = StringIO()
-        self.pbar = tqdm(desc='\n'+node_class, total=total, file=self.stream)
+        self.pbar = tqdm(desc=node_class if TELEBOT_DEBUG else None, total=total, file=self.stream)
     
     def update(self, current):
+        self.stream.truncate(0)
+        self.stream.seek(0)
         self.pbar.n = current
         self.pbar.refresh()
         self.bot.edit_message_text(

@@ -54,9 +54,7 @@ class ImageMenu:
         markup.add(types.InlineKeyboardButton("close", callback_data=f"close|{id}"))
         reply_text = concat_strings(
             mention(message.from_user),
-            "IMAGE MENU",
-            f"Current prompt: `{pmc.prompt.replace('`', '')}`",
-            "Choose a command. This menu will be deleted automatically after 30s"
+            "IMAGE MENU (auto deleted after 30s)",
         )
         reply_message = bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
         pmc.append(reply_message)
