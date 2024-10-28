@@ -5,7 +5,7 @@ from io import BytesIO
 import dbm
 from telebot import TeleBot, types
 from contextlib import contextmanager
-import logging, unicodedata
+import logging, unicodedata, threading, schedule, time
 
 def get_username(user: types.User):
     name = None
@@ -31,7 +31,7 @@ def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typin
         try: bot.reply_to(message, text)
         except: bot.send_message(
             message.chat.id,
-            f"{mention(message.from_user)} Result of `{full_command}`:\n{text}", 
+            f"{mention(message.from_user)} {text}", 
             parse_mode="Markdown"
         )
     else:
@@ -41,12 +41,12 @@ def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typin
             try: bot.send_photo(
                 message.chat.id, 
                 photo, 
-                caption=f"[@{mention(message.from_user)} Result of `{full_command}`", 
+                caption=mention(message.from_user), 
                 parse_mode="Markdown"
             )
             except: bot.send_message(
                 message.chat.id, 
-                f"[@{mention(message.from_user)} Can't get image from `{full_command}`. Try again.", 
+                f"{mention(message.from_user)} Can't get image from `{full_command}`. Try again.", 
                 parse_mode="Markdown"
             )
 
@@ -59,7 +59,7 @@ def handle_exception(bot: TeleBot, original_message: types.Message, e: Exception
     Path(error_log_dir, f"{date_str} {original_message.chat.id} {original_message.from_user.id}.txt") \
         .resolve() \
         .write_text(traceback.format_exc(), encoding="utf-8")
-    telegram_reply_to(bot, original_message, f"Error: {str(e)}")
+    telegram_reply_to(bot, original_message, f"Error ({date_str})")
 
 def get_dbm(db_name):
     dbm_dir = Path(__file__).parent / "dbm_data"
@@ -108,3 +108,11 @@ def all_logging_disabled(highest_level=logging.CRITICAL):
         yield
     finally:
         logging.disable(previous_level)
+
+def start_schedule_thread():
+    cease_continuous_run = threading.Event()
+    def loop():
+        while not cease_continuous_run.is_set():
+            schedule.run_pending()
+            time.sleep(1)
+    threading.Thread(target=loop).start()

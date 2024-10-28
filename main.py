@@ -4,32 +4,22 @@ import dotenv;dotenv.load_dotenv()
 
 from preprocess import preprocess
 from worker import ComfyWorker
-from backed_bot_utils import parse_command_string
+from backed_bot_utils import parse_command_string, start_schedule_thread
 from special_commands import SPECIAL_COMMANDS
 from telebot import types, TeleBot, logger, logging
 from image_menu import ImageMenu
-import middlewares, time, threading, schedule
+import middlewares, time
 
-COMMANDS = preprocess(["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput", "AppIO_ImageInputFromID"])
+start_schedule_thread()
+COMMANDS = preprocess(
+    ["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput", "AppIO_ImageInputFromID"]
+    + os.environ.get("NODES_TO_CACHE", '').split(',')
+)
 COMMANDS.extend(SPECIAL_COMMANDS.keys())
 COMMANDS.extend(["image_menu"])
 FREE_COMMANDS = ["get_ids"]
 # Disabled by default as the the contractor deems unnecessary
 ENABLE_COMMANDS = int(os.environ.get("ENABLE_COMMANDS", "0"))
-
-def remove_message_loop():
-    cease_continuous_run = threading.Event()
-    class ScheduleThread(threading.Thread):
-        @classmethod
-        def run(cls):
-            while not cease_continuous_run.is_set():
-                schedule.run_pending()
-                time.sleep(1)
-
-    continuous_thread = ScheduleThread()
-    continuous_thread.start()
-
-remove_message_loop()
 if int(os.environ.get("TELEBOT_DEBUG", "0")):
     logger.setLevel(logging.DEBUG)
 bot = TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None, use_class_middlewares=True)

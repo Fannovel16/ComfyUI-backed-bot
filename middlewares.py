@@ -37,6 +37,7 @@ class AntiFlood(BaseMiddleware):
                 def delete_message():
                     try: self.bot.delete_message(notify_message.chat.id, notify_message.id)
                     except: pass
+                    return schedule.CancelJob
                 notify_message_date = notify_message.date
                 schedule.every(self.temp_message_delay_sec).seconds.do(delete_message)
             self.last_time[user_id] = (message.date, notify_message_date)
