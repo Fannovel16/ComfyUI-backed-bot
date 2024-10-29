@@ -1,10 +1,11 @@
 from telebot import types, TeleBot
 from preprocess import analyze_argument_from_preprocessed, serialize_input_nodes, deserialize_input_chain_message
 from dataclasses import dataclass
-import os
-from backed_bot_utils import mention
-import schedule
+from backed_bot_utils import mention, get_username
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor, Future
+from queue import Queue
+import os, schedule, time
 
 SECRET_MONITOR_ROOM = os.environ.get("SECRET_MONITOR_ROOM", None)
 
@@ -17,6 +18,23 @@ def title_pad(title="SETTINGS", length=30, pad_char='-'):
 
 def sep(length=30, pad_char='-'):
     return pad_char*length + "\n```"
+
+# Group rate limit is 20 messages/mintute
+class DelayedExecutor:
+    def __init__(self, delay=5):
+        self.delay = delay
+        self.executor = ThreadPoolExecutor(max_workers=2)
+
+    def __call__(self, chat: types.Chat, func):
+        if chat.type == "private":
+            return func()
+
+        def delayed_task():
+            time.sleep(self.delay)
+            return func()
+
+        future = self.executor.submit(delayed_task)
+        return future.result()
 
 @dataclass
 class PhotoMessageChain:
@@ -41,11 +59,15 @@ class ImageMenu:
     def __init__(self, bot: TeleBot, worker):
         self.bot = bot
         self.worker = worker
+        self.menu_callback_executor = DelayedExecutor(2)
+        self.image_output_executor = DelayedExecutor(2)
         self.create_handlers()
 
+    menu_executor = DelayedExecutor(5)
     @classmethod
     def image_menu(s, bot: TeleBot, message: types.Message, parsed_data: dict):
         if message.content_type != "photo": return
+        print(f"Sending image menu to @{get_username(message.from_user)} ({message.from_user.id})")
         command_input_nodes = analyze_argument_from_preprocessed()
         id = str(message.id)
         pmc = PhotoMessageChain(id, bot, message, [])
@@ -57,7 +79,9 @@ class ImageMenu:
             mention(message.from_user),
             f"IMAGE MENU (auto deleted after 30s) - Prompt: `{pmc.prompt}`",
         )
-        reply_message = bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
+        reply_message = s.menu_executor(
+            lambda: bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
+        )
         pmc.append(reply_message)
         def delete_message():
             try: bot.delete_message(reply_message.chat.id, reply_message.id)
@@ -77,6 +101,7 @@ class ImageMenu:
                 pmc.auto_close_job.run()
                 return
 
+            print(f"@{get_username(call.message.from_user)} ({call.message.from_user.id}) called {command}")
             command_input_nodes = analyze_argument_from_preprocessed()
             serialized_form = serialize_input_nodes(command, id, pmc.prompt, command_input_nodes[command].values())
             _, form, form_types = deserialize_input_chain_message(serialized_form)
@@ -93,13 +118,15 @@ class ImageMenu:
                 pmc.append(self.bot.reply_to(pmc.orig_message, reply_text, reply_markup=force_reply, parse_mode="Markdown"))
             else:
                 pmc.delete()
-                pbar_message = self.bot.reply_to(pmc.orig_message, "Executing...", parse_mode="Markdown")
+                pbar_message = self.menu_callback_executor(
+                    lambda: self.bot.reply_to(pmc.orig_message, "Executing...", parse_mode="Markdown")
+                )
                 pmc.append(pbar_message)
                 self.worker.execute(
                     form["command"],
                     pmc.orig_message, form, 
-                    pbar_message=pbar_message, 
-                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
+                    pbar_message=pbar_message if pbar_message.chat.type == "private" else None, 
+                    image_output_callback=lambda image_pil: self.image_output_executor(lambda: self.finish(pmc, serialized_form, image_pil))
                 )
 
 
@@ -154,8 +181,8 @@ class ImageMenu:
                     form["command"], 
                     pmc.orig_message, 
                     form,
-                    pbar_message=pbar_message,
-                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
+                    pbar_message=pbar_message if pbar_message.chat.type == "private" else None,
+                    image_output_callback=lambda image_pil: self.image_output_executor(lambda: self.finish(pmc, serialized_form, image_pil))
                 )
     
     def send_photo(self, orig_message, image_pil, caption):
