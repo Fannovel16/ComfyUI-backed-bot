@@ -31,7 +31,7 @@ def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typin
         try: bot.reply_to(message, text)
         except: bot.send_message(
             message.chat.id,
-            f"{mention(message.from_user)} {text}", 
+            f"{mention(message.from_user)} `{text}`", 
             parse_mode="Markdown"
         )
     else:
