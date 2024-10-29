@@ -183,7 +183,7 @@ class ImageMenu:
                     pmc.orig_message, 
                     form,
                     pbar_message=pbar_message if pbar_message.chat.type == "private" else None,
-                    image_output_callback=lambda: self.finish(pmc, serialized_form, image_pil)
+                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
                 )
     
     def send_photo(self, orig_message, image_pil, caption):
