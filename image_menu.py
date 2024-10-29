@@ -26,8 +26,8 @@ class DelayedExecutor:
         self.executor = ThreadPoolExecutor(max_workers=2)
 
     def __call__(self, chat: types.Chat, func):
-        #if chat.type == "private":
-        #    return func()
+        if chat.type == "private":
+            return func()
 
         def delayed_task():
             time.sleep(self.delay)

@@ -120,7 +120,7 @@ class NodeProgressBar:
         self.pbar = tqdm(desc=node_class if TELEBOT_DEBUG else None, total=total, file=self.stream)
     
     def update(self, current):
-        if current % 4 != 0 and current < self.pbar.n:
+        if current % 4 != 0 and current < self.pbar.total:
             return
         self.stream.truncate(0)
         self.stream.seek(0)
