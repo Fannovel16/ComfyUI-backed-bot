@@ -26,8 +26,8 @@ class DelayedExecutor:
         self.executor = ThreadPoolExecutor(max_workers=2)
 
     def __call__(self, chat: types.Chat, func):
-        if chat.type == "private":
-            return func()
+        #if chat.type == "private":
+        #    return func()
 
         def delayed_task():
             time.sleep(self.delay)
@@ -59,8 +59,7 @@ class ImageMenu:
     def __init__(self, bot: TeleBot, worker):
         self.bot = bot
         self.worker = worker
-        self.menu_callback_executor = DelayedExecutor(2)
-        self.image_output_executor = DelayedExecutor(2)
+        self.menu_callback_executor = DelayedExecutor(3)
         self.create_handlers()
 
     menu_executor = DelayedExecutor(5)
@@ -72,7 +71,7 @@ class ImageMenu:
         id = str(message.id)
         pmc = PhotoMessageChain(id, bot, message, [])
         markup = types.InlineKeyboardMarkup()
-        markup.row_width = 4
+        markup.row_width = 3
         markup.add(*[types.InlineKeyboardButton(command, callback_data=f"{command}|{id}") for command in command_input_nodes.keys()])
         markup.add(types.InlineKeyboardButton("close", callback_data=f"close|{id}"))
         reply_text = concat_strings(
@@ -80,6 +79,7 @@ class ImageMenu:
             f"IMAGE MENU (auto deleted after 30s) - Prompt: `{pmc.prompt}`",
         )
         reply_message = s.menu_executor(
+            pmc.orig_message.chat,
             lambda: bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
         )
         pmc.append(reply_message)
@@ -119,6 +119,7 @@ class ImageMenu:
             else:
                 pmc.delete()
                 pbar_message = self.menu_callback_executor(
+                    pmc.orig_message.chat,
                     lambda: self.bot.reply_to(pmc.orig_message, "Executing...", parse_mode="Markdown")
                 )
                 pmc.append(pbar_message)
@@ -126,7 +127,7 @@ class ImageMenu:
                     form["command"],
                     pmc.orig_message, form, 
                     pbar_message=pbar_message if pbar_message.chat.type == "private" else None, 
-                    image_output_callback=lambda image_pil: self.image_output_executor(lambda: self.finish(pmc, serialized_form, image_pil))
+                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
                 )
 
 
@@ -182,7 +183,7 @@ class ImageMenu:
                     pmc.orig_message, 
                     form,
                     pbar_message=pbar_message if pbar_message.chat.type == "private" else None,
-                    image_output_callback=lambda image_pil: self.image_output_executor(lambda: self.finish(pmc, serialized_form, image_pil))
+                    image_output_callback=lambda: self.finish(pmc, serialized_form, image_pil)
                 )
     
     def send_photo(self, orig_message, image_pil, caption):
