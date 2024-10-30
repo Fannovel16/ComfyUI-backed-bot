@@ -187,6 +187,7 @@ class ImageMenu:
                 )
     
     def send_photo(self, orig_message, image_pil, caption):
+        print(f"Sending output to @{get_username(orig_message.from_user)} ({orig_message.from_user.id})")
         try:
             image_bytes = BytesIO()
             image_pil.save(image_bytes, format="PNG")
