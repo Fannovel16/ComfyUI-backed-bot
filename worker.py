@@ -168,9 +168,8 @@ class ComfyWorker:
         with all_logging_disabled():
             import preprocessed
             import comfy.model_management as mm
-            from nodes import NODE_CLASS_MAPPINGS
             from comfy.utils import set_progress_bar_global_hook
-            self.NODE_CLASS_MAPPINGS = NODE_CLASS_MAPPINGS
+            self.NODE_CLASS_MAPPINGS = preprocessed.NODE_CLASS_MAPPINGS
             
         print("Telegram bot running, listening for all commands")
         while True:
@@ -182,7 +181,7 @@ class ComfyWorker:
                 set_progress_bar_global_hook(lambda *args: self.message_pbar_hook(pbar_message, *args))
             try:
                 getattr(preprocessed, command_name)(self.NODE_CLASS_MAPPINGS, hooks)
-                mm.cleanup_models()
+                ## mm.cleanup_models()
                 gc.collect()
                 mm.soft_empty_cache()
             except Exception as e:
