@@ -181,7 +181,7 @@ class ComfyWorker:
                 set_progress_bar_global_hook(lambda *args: self.message_pbar_hook(pbar_message, *args))
             try:
                 getattr(preprocessed, command_name)(self.NODE_CLASS_MAPPINGS, hooks)
-                ## mm.cleanup_models()
+                mm.cleanup_models(keep_clone_weights_loaded=True)
                 gc.collect()
                 mm.soft_empty_cache()
             except Exception as e:
