@@ -101,7 +101,7 @@ class ImageMenu:
                 pmc.auto_close_job.run()
                 return
 
-            print(f"@{get_username(call.message.from_user)} ({call.message.from_user.id}) called {command}")
+            print(f"@{get_username(call.from_user)} ({call.from_user.id}) called {command}")
             command_input_nodes = analyze_argument_from_preprocessed()
             serialized_form = serialize_input_nodes(command, id, pmc.prompt, command_input_nodes[command].values())
             _, form, form_types = deserialize_input_chain_message(serialized_form)
