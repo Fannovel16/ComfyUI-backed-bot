@@ -93,7 +93,9 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
             node = self.NODE_CLASS_MAPPINGS[node_to_cache]()
             def cache_proxy(*arg, **kwargs):
                 if node_to_cache not in NODE_OUTPUT_CACHES:
+                    print(f"Caching node {node_to_cache}...")
                     NODE_OUTPUT_CACHES[node_to_cache] = getattr(node, node.FUNCTION)(*arg, **kwargs)
+                print(f"Using pre-cached node {node_to_cache}")
                 return NODE_OUTPUT_CACHES[node_to_cache]
             hooks[node_to_cache] = SimpleNamespace(**{node.FUNCTION: cache_proxy})
         if len(not_installed_nodes):
@@ -179,7 +181,7 @@ class ComfyWorker:
             if pbar_message is not None:
                 set_progress_bar_global_hook(lambda *args: self.message_pbar_hook(pbar_message, *args))
             try:
-                getattr(preprocessed, command_name)(hooks)
+                getattr(preprocessed, command_name)(self.NODE_CLASS_MAPPINGS, hooks)
                 mm.cleanup_models()
                 gc.collect()
                 mm.soft_empty_cache()

@@ -1,11 +1,85 @@
 from pathlib import Path
 import shutil
 import re, ast
-from dataclasses import dataclass 
+from dataclasses import dataclass
 
 py_workflows_dir = Path(__file__, '..' , 'python_workflows').resolve()
 py_workflows_dir.mkdir(exist_ok=True)
 preprocessed_dir = Path(__file__, '..', 'preprocessed').resolve()
+preprocessed_init_code = """
+import sys, os
+
+def find_path(name: str, path: str = None) -> str:
+    # If no path is given, use the current working directory
+    if path is None:
+        path = os.getcwd()
+
+    # Check if the current directory contains the name
+    if name in os.listdir(path):
+        path_name = os.path.join(path, name)
+        print(f"{name} found: {path_name}")
+        return path_name
+
+    # Get the parent directory
+    parent_directory = os.path.dirname(path)
+
+    # If the parent directory is the same as the current directory, we've reached the root and stop the search
+    if parent_directory == path:
+        return None
+
+    # Recursively call the function with the parent directory
+    return find_path(name, parent_directory)
+
+
+def add_comfyui_directory_to_sys_path() -> None:
+    comfyui_path = find_path("ComfyUI")
+    if comfyui_path is not None and os.path.isdir(comfyui_path):
+        sys.path.insert(0, comfyui_path)
+        print(f"'{comfyui_path}' added to sys.path")
+
+
+def add_extra_model_paths() -> None:
+    try:
+        from main import load_extra_path_config
+    except ImportError:
+        print(
+            "Could not import load_extra_path_config from main.py. Looking in utils.extra_config instead."
+        )
+        from utils.extra_config import load_extra_path_config
+
+    extra_model_paths = find_path("extra_model_paths.yaml")
+
+    if extra_model_paths is not None:
+        load_extra_path_config(extra_model_paths)
+    else:
+        print("Could not find the extra_model_paths config file.")
+
+
+add_comfyui_directory_to_sys_path()
+add_extra_model_paths()
+
+
+def import_custom_nodes() -> None:
+    import asyncio
+    import execution
+    from nodes import init_extra_nodes
+    import server
+
+    # Creating a new event loop and setting it as the default loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Creating an instance of PromptServer with the loop
+    server_instance = server.PromptServer(loop)
+    execution.PromptQueue(server_instance)
+
+    # Initializing custom nodes
+    init_extra_nodes()
+
+
+from nodes import NODE_CLASS_MAPPINGS
+import_custom_nodes()
+""".strip()
 
 def preprocess(hooks):
     shutil.rmtree(preprocessed_dir, ignore_errors=True)
@@ -14,17 +88,19 @@ def preprocess(hooks):
     for workflow_py in py_workflows_dir.iterdir():
         if workflow_py.name.startswith('.'): continue #E.g. .ipynb_checkpoints
         code = workflow_py.read_text(encoding="utf-8")
-        code = code.replace("def main():", f"def main(hooks):") \
-                    .replace("sys.path.append(comfyui_path)", "sys.path.insert(0, comfyui_path)") \
-                    .replace("    import_custom_nodes()", '') \
-                    .replace("from nodes import NODE_CLASS_MAPPINGS", "from nodes import NODE_CLASS_MAPPINGS\nimport_custom_nodes()")
+        start_duplicated, end_duplicated = code.index("def find_path"), code.index("def main")
+        code = code[:start_duplicated] + code[end_duplicated:]
+        code = code.replace("def main():", f"def main(NODE_CLASS_MAPPINGS, hooks):") \
+                    .replace("    import_custom_nodes()", '')
         for hooker in hooks:
             code = code.replace(f'NODE_CLASS_MAPPINGS["{hooker}"]()', f'hooks["{hooker}"]')
         temp_file = preprocessed_dir / f"appio_{workflow_py.name}"
         temp_file.write_text(code)
         commands.append(workflow_py.stem)
+    
+    init_code = preprocessed_init_code + "\n\n" + '\n'.join([f"from .appio_{command} import main as {command}" for command in commands])
     init_file = preprocessed_dir / "__init__.py"
-    init_file.write_text('\n'.join([f"from .appio_{command} import main as {command}" for command in commands]), encoding="utf-8")
+    init_file.write_text(init_code, encoding="utf-8")
     return commands
 
 def extract_execute_arguments(tree, node_id):
