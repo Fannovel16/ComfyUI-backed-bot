@@ -61,6 +61,7 @@ class ImageMenu:
         self.worker = worker
         self.menu_callback_executor = DelayedExecutor(3)
         self.create_handlers()
+        self.MAX_NUM_RETRIES = 2
 
     menu_executor = DelayedExecutor(5)
     @classmethod
@@ -186,8 +187,9 @@ class ImageMenu:
                     image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
                 )
     
-    def send_photo(self, orig_message, image_pil, caption):
+    def send_photo(self, orig_message, image_pil, caption, num_retried=0):
         print(f"Sending output to @{get_username(orig_message.from_user)} ({orig_message.from_user.id})")
+        
         try:
             image_bytes = BytesIO()
             image_pil.save(image_bytes, format="PNG")
@@ -200,6 +202,8 @@ class ImageMenu:
                 parse_mode="Markdown"
             )
         except:
+            pass
+        try:
             image_bytes = BytesIO()
             image_pil.save(image_bytes, format="PNG")
             image_bytes.seek(0)
@@ -209,6 +213,15 @@ class ImageMenu:
                 caption,
                 parse_mode="Markdown"
             )
+        except:
+            num_retried += 1
+            if num_retried > self.MAX_NUM_RETRIES:
+                return self.bot.send_message(
+                    orig_message.chat.id, 
+                    f"{mention(orig_message.from_user)} Failed to send output image. Please retry again",
+                    parse_mode="Markdown"
+                )
+            return self.send_photo(orig_message, image_pil, caption, num_retried)
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
         finish_text_simple = mention(pmc.orig_message.from_user)
