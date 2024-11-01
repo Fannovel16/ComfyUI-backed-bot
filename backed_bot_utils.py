@@ -1,11 +1,24 @@
 import typing
-import datetime, traceback
+import traceback
 from pathlib import Path
-from io import BytesIO
-import dbm
-from telebot import TeleBot, types
+from io import BytesIO, StringIO
+import dbm, os
+from telebot import TeleBot, types, logger
 from contextlib import contextmanager
 import logging, unicodedata, threading, schedule, time
+from datetime import datetime, timezone, timedelta
+import sys, platform
+
+TIMEZONE_DELTA = float(os.environ.get("TIMEZONE_DELTA", "7"))
+LOG_CAPTURE = StringIO()
+ch = logging.StreamHandler(LOG_CAPTURE)
+ch.setLevel(logging.DEBUG)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    handlers=[ch],
+    force=True
+)
 
 def get_username(user: types.User):
     name = None
@@ -28,38 +41,53 @@ def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typin
     if full_command is None: full_command = ''
     if isinstance(text_or_photo, str):
         text = text_or_photo
-        try: bot.reply_to(message, text)
-        except: bot.send_message(
-            message.chat.id,
-            f"{mention(message.from_user)} `{text}`", 
-            parse_mode="Markdown"
-        )
+        try: return bot.reply_to(message, text)
+        except: pass
+        try:
+            return bot.send_message(
+                message.chat.id,
+                f"{mention(message.from_user)} `{text}`", 
+                parse_mode="Markdown"
+            )
+        except: pass
     else:
         photo = text_or_photo
-        try: bot.send_photo(message.chat.id, photo, reply_to_message_id=message.id)
-        except:
-            try: bot.send_photo(
+        try:
+            return bot.send_photo(message.chat.id, photo, reply_to_message_id=message.id)
+        except: pass
+        try: 
+            return bot.send_photo(
                 message.chat.id, 
                 photo, 
                 caption=mention(message.from_user), 
                 parse_mode="Markdown"
             )
-            except: bot.send_message(
+        except: pass
+        try:
+            return bot.send_message(
                 message.chat.id, 
                 f"{mention(message.from_user)} Can't get image from `{full_command}`. Try again.", 
                 parse_mode="Markdown"
             )
+        except: pass
 
-def handle_exception(bot: TeleBot, original_message: types.Message, e: Exception, full_traceback: str):
-    utc_time = datetime.datetime.now(datetime.timezone.utc)
+def handle_exception(bot: TeleBot, orig_message: types.Message, e: Exception, full_traceback: str):
+    utc_time = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=TIMEZONE_DELTA)))
     date_str = utc_time.strftime("%d-%m-%Y_%H.%M.%S")
     error_log_dir = Path(__file__, '..', 'error_logs').resolve()
     error_log_dir.mkdir(exist_ok=True)
-    
-    Path(error_log_dir, f"{date_str} {original_message.chat.id} {original_message.from_user.id}.txt") \
-        .resolve() \
-        .write_text(traceback.format_exc(), encoding="utf-8")
-    telegram_reply_to(bot, original_message, f"Error ({date_str}). Please retry again")
+    with suppress_stdout():
+        Path(error_log_dir, f"{date_str}.txt") \
+            .resolve() \
+            .write_text(
+                f"In {orig_message.chat.type} chat {orig_message.chat.title or ''} ({orig_message.chat.id}), user @{get_username(orig_message.from_user)} ({orig_message.from_user.id}) got error:\n" \
+                + traceback.format_exc() \
+                + f"\n\nTeleBot's logging: \n{LOG_CAPTURE.getvalue()}",
+                encoding="utf-8"
+            )
+    LOG_CAPTURE.truncate(0)
+    LOG_CAPTURE.seek(0)
+    telegram_reply_to(bot, orig_message, f"Error ({date_str}). Please retry again")
 
 def get_dbm(db_name):
     dbm_dir = Path(__file__).parent / "dbm_data"
@@ -108,6 +136,22 @@ def all_logging_disabled(highest_level=logging.CRITICAL):
         yield
     finally:
         logging.disable(previous_level)
+
+@contextmanager
+def suppress_stdout(suppress_stderr=False):
+    devnull = 'nul' if platform.system().lower() == 'windows' else '/dev/null'
+    with open(devnull, 'w') as null:
+        stdout = sys.stdout
+        stderr = sys.stderr if suppress_stderr else None
+        sys.stdout = null
+        if suppress_stderr:
+            sys.stderr = null
+        try:
+            yield
+        finally:
+            sys.stdout = stdout
+            if suppress_stderr:
+                sys.stderr = stderr
 
 def start_schedule_thread():
     cease_continuous_run = threading.Event()
