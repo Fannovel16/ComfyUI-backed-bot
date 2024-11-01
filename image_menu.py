@@ -5,7 +5,7 @@ from backed_bot_utils import mention, get_username
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, Future
 from queue import Queue
-import os, schedule, time
+import os, schedule, time, middlewares
 
 SECRET_MONITOR_ROOM = os.environ.get("SECRET_MONITOR_ROOM", None)
 
@@ -59,18 +59,22 @@ class ImageMenu:
     def __init__(self, bot: TeleBot, worker):
         self.bot = bot
         self.worker = worker
+        self.anti_flood = middlewares.get_anti_flood()
+        self.menu_executor = DelayedExecutor(5)
         self.menu_callback_executor = DelayedExecutor(3)
         self.create_handlers()
         self.MAX_NUM_RETRIES = 2
 
-    menu_executor = DelayedExecutor(5)
-    @classmethod
-    def image_menu(s, bot: TeleBot, message: types.Message, parsed_data: dict):
+    def image_menu(self, _, message: types.Message, parsed_data: dict):
         if message.content_type != "photo": return
+        if message.chat.type == "private":
+            signal = self.anti_flood.check(message.from_user.id, message)
+            if type(signal) == middlewares.CancelUpdate: return
         print(f"Sending image menu to @{get_username(message.from_user)} ({message.from_user.id})")
+
         command_input_nodes = analyze_argument_from_preprocessed()
         id = str(message.id)
-        pmc = PhotoMessageChain(id, bot, message, [])
+        pmc = PhotoMessageChain(id, self.bot, message, [])
         markup = types.InlineKeyboardMarkup()
         markup.row_width = 3
         markup.add(*[types.InlineKeyboardButton(command, callback_data=f"{command}|{id}") for command in command_input_nodes.keys()])
@@ -79,13 +83,13 @@ class ImageMenu:
             mention(message.from_user),
             f"IMAGE MENU (auto deleted after 30s) - Prompt: `{pmc.prompt}`",
         )
-        reply_message = s.menu_executor(
+        reply_message = self.menu_executor(
             pmc.orig_message.chat,
-            lambda: bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
+            lambda: self.bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
         )
         pmc.append(reply_message)
         def delete_message():
-            try: bot.delete_message(reply_message.chat.id, reply_message.id)
+            try: self.bot.delete_message(reply_message.chat.id, reply_message.id)
             except: pass
             return schedule.CancelJob
         pmc.auto_close_job = schedule.every(30).seconds.do(delete_message)
@@ -101,6 +105,9 @@ class ImageMenu:
             if command == "close":
                 pmc.auto_close_job.run()
                 return
+            if pmc.orig_message.chat.type != "private":
+                signal = self.anti_flood.check(call.from_user.id, call.message)
+                if type(signal) == middlewares.CancelUpdate: return
 
             print(f"@{get_username(call.from_user)} ({call.from_user.id}) called {command}")
             command_input_nodes = analyze_argument_from_preprocessed()

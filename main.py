@@ -23,19 +23,19 @@ ENABLE_COMMANDS = int(os.environ.get("ENABLE_COMMANDS", "0"))
 if int(os.environ.get("TELEBOT_DEBUG", "0")):
     logger.setLevel(logging.DEBUG)
 bot = TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None, use_class_middlewares=True)
-bot.setup_middleware(middlewares.AntiFlood(
+bot.setup_middleware(middlewares.get_anti_flood(
     bot=bot,
     commands=COMMANDS,
     free_commands=FREE_COMMANDS,
     allowed_chat_ids=os.environ.get("ALLOWED_CHAT_IDS", ''),
     allowed_user_ids=os.environ.get("ALLOWED_USER_IDS", ''),
     start_time=time.time(),
-    window_limit_sec=int(os.environ.get("MESSAGE_WINDOW_RATE_LIMIT", '3')),
-    temp_message_delay_sec=int(os.environ.get("TEMP_MESSAGE_LIFE", '3'))
+    window_limit_sec=int(os.environ.get("MESSAGE_WINDOW_RATE_LIMIT", '5')),
+    temp_message_delay_sec=int(os.environ.get("TEMP_MESSAGE_LIFE", '5'))
 ))
 worker = ComfyWorker(bot)
 image_menu = ImageMenu(bot, worker)
-SPECIAL_COMMANDS["image_menu"] = ImageMenu.image_menu
+SPECIAL_COMMANDS["image_menu"] = image_menu.image_menu
 
 @bot.message_handler(["get_ids"])
 def get_ids(message: types.Message):
@@ -55,4 +55,4 @@ def main(message: types.Message):
     elif ENABLE_COMMANDS:
         worker.execute(command_name, message, parsed_data)
 
-bot.polling()
+bot.infinity_polling()

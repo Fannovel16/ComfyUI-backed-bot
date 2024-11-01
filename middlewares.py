@@ -25,7 +25,7 @@ class AntiFlood(BaseMiddleware):
             return False
         return True
     
-    def check_flood(self, user_id, message):
+    def check(self, user_id, message):
         if not user_id in self.last_time:
             self.last_time[user_id] = (message.date, None)
             return ContinueHandling()
@@ -33,7 +33,8 @@ class AntiFlood(BaseMiddleware):
         last_message_date, notify_message_date = self.last_time[user_id]
         if message.date - last_message_date < self.limit:
             if (notify_message_date is None) or (message.date - notify_message_date > self.temp_message_delay_sec):
-                notify_message = self.bot.send_message(message.chat.id, f"You are spamming requests. Wait for {self.limit} seconds")
+                print(f"User {user_id} are spamming")
+                notify_message = self.bot.send_message(message.chat.id, f"You are spamming commands. Wait for {self.limit} seconds")
                 def delete_message():
                     try: self.bot.delete_message(notify_message.chat.id, notify_message.id)
                     except: pass
@@ -75,7 +76,16 @@ class AntiFlood(BaseMiddleware):
             print(f"Command {command_name} not defined. Current available commands: {', '.join(self.commands)}")
             return CancelUpdate()
 
-        return self.check_flood(user_id, message)
+        return self.check(user_id, message)
         
     def post_process(self, message, data, exception):
         pass
+
+anti_flood = None
+def get_anti_flood(*args, **kwargs):
+    global anti_flood
+    if anti_flood is None:
+        if len(args) == 0 and len(kwargs) == 0:
+            raise RuntimeError("Anti flood middleware is not initialized, got zero argument")
+        anti_flood = AntiFlood(*args, **kwargs)
+    return anti_flood
