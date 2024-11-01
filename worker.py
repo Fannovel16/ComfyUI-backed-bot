@@ -6,7 +6,6 @@ import torch
 import numpy as np
 from io import BytesIO, StringIO
 from collections import deque
-import traceback
 import threading
 from backed_bot_utils import telegram_reply_to, get_username, handle_exception, get_dbm, all_logging_disabled
 import os, gc, inspect
@@ -185,6 +184,6 @@ class ComfyWorker:
                 gc.collect()
                 mm.soft_empty_cache()
             except Exception as e:
-                handle_exception(self.bot, message, e, traceback.format_exc())
+                handle_exception(self.bot, message)
             finally:
                 set_progress_bar_global_hook(None)

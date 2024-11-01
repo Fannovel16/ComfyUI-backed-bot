@@ -4,9 +4,9 @@ import dotenv;dotenv.load_dotenv()
 
 from preprocess import preprocess
 from worker import ComfyWorker
-from backed_bot_utils import parse_command_string, start_schedule_thread
+from backed_bot_utils import parse_command_string, start_schedule_thread, handle_exception
 from special_commands import SPECIAL_COMMANDS
-from telebot import types, TeleBot, logger, logging
+from telebot import types, TeleBot, logger, logging, ExceptionHandler
 from image_menu import ImageMenu
 import middlewares, time
 
@@ -22,7 +22,13 @@ FREE_COMMANDS = ["get_ids"]
 ENABLE_COMMANDS = int(os.environ.get("ENABLE_COMMANDS", "0"))
 if int(os.environ.get("TELEBOT_DEBUG", "0")):
     logger.setLevel(logging.DEBUG)
-bot = TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None, use_class_middlewares=True)
+
+class MyExceptionHandler(ExceptionHandler):
+    def handle(self, exception):
+        #logging.error(exception)
+        handle_exception(bot)
+
+bot = TeleBot(os.environ["TELEGRAM_BOT_TOKEN"], parse_mode=None, use_class_middlewares=True, exception_handler=MyExceptionHandler())
 bot.setup_middleware(middlewares.get_anti_flood(
     bot=bot,
     commands=COMMANDS,

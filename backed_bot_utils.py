@@ -7,7 +7,7 @@ from telebot import TeleBot, types, logger
 from contextlib import contextmanager
 import logging, unicodedata, threading, schedule, time
 from datetime import datetime, timezone, timedelta
-import sys, platform
+from typing import Optional
 
 TIMEZONE_DELTA = float(os.environ.get("TIMEZONE_DELTA", "7"))
 LOG_CAPTURE = StringIO()
@@ -71,12 +71,22 @@ def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typin
             )
         except: pass
 
-def handle_exception(bot: TeleBot, orig_message: types.Message, e: Exception, full_traceback: str):
+def handle_exception(bot: TeleBot, orig_message: Optional[types.Message] = None):
     utc_time = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=TIMEZONE_DELTA)))
     date_str = utc_time.strftime("%d-%m-%Y_%H.%M.%S")
     error_log_dir = Path(__file__, '..', 'error_logs').resolve()
     error_log_dir.mkdir(exist_ok=True)
-    with suppress_stdout():
+
+    if orig_message is None:
+        Path(error_log_dir, f"{date_str}.txt") \
+        .resolve() \
+        .write_text(
+            traceback.format_exc() \
+            + f"\n\nTeleBot's logging: \n{LOG_CAPTURE.getvalue()}",
+            encoding="utf-8"
+        )
+        print(f"Connection error! See {date_str}.txt for more details")
+    else:
         Path(error_log_dir, f"{date_str}.txt") \
             .resolve() \
             .write_text(
@@ -85,9 +95,11 @@ def handle_exception(bot: TeleBot, orig_message: types.Message, e: Exception, fu
                 + f"\n\nTeleBot's logging: \n{LOG_CAPTURE.getvalue()}",
                 encoding="utf-8"
             )
+        print(f"Error during command execution. See {date_str} for more details")
+        telegram_reply_to(bot, orig_message, f"Error ({date_str}). Please retry again")
+    
     LOG_CAPTURE.truncate(0)
     LOG_CAPTURE.seek(0)
-    telegram_reply_to(bot, orig_message, f"Error ({date_str}). Please retry again")
 
 def get_dbm(db_name):
     dbm_dir = Path(__file__).parent / "dbm_data"
@@ -136,22 +148,6 @@ def all_logging_disabled(highest_level=logging.CRITICAL):
         yield
     finally:
         logging.disable(previous_level)
-
-@contextmanager
-def suppress_stdout(suppress_stderr=False):
-    devnull = 'nul' if platform.system().lower() == 'windows' else '/dev/null'
-    with open(devnull, 'w') as null:
-        stdout = sys.stdout
-        stderr = sys.stderr if suppress_stderr else None
-        sys.stdout = null
-        if suppress_stderr:
-            sys.stderr = null
-        try:
-            yield
-        finally:
-            sys.stdout = stdout
-            if suppress_stderr:
-                sys.stderr = stderr
 
 def start_schedule_thread():
     cease_continuous_run = threading.Event()

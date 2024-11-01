@@ -1,7 +1,6 @@
 from telebot import types, TeleBot
 from telebot import types
 from backed_bot_utils import telegram_reply_to, handle_exception, get_username, get_dbm
-import traceback
 from PIL import Image
 from io import BytesIO
 
@@ -20,8 +19,8 @@ def set_image_id(bot: TeleBot, message: types.Message, parsed_data: dict):
             file_id = max(message.photo, key=lambda p:p.width).file_id
             image_ids[full_image_id] = file_id
         return telegram_reply_to(bot, message, f"Image id {_image_id} is set successfully")
-    except Exception as e:
-        handle_exception(bot, message, e, traceback.format_exc())
+    except:
+        handle_exception(bot, message)
 
 def get_image_id(bot: TeleBot, message: types.Message, parsed_data: dict):
     _image_id = parsed_data.get("prompt", '') or ''
@@ -41,8 +40,8 @@ def get_image_id(bot: TeleBot, message: types.Message, parsed_data: dict):
         image_pil.save(image_bytes, format="PNG")
         image_bytes.seek(0)
         telegram_reply_to(bot, message, image_bytes)
-    except Exception as e:
-        handle_exception(bot, message, e, traceback.format_exc())
+    except:
+        handle_exception(bot, message)
 
 
 SPECIAL_COMMANDS = {
