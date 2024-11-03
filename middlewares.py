@@ -64,12 +64,6 @@ class AntiFlood(BaseMiddleware):
             print(f"Skip message {message.id} from {user_name} ({user_id}) for being sended before starting-up")
             return CancelUpdate()
         
-        if not self.authenticate(chat_id, user_id, user_name):
-            return CancelUpdate()
-
-        if message.reply_to_message is not None and message.reply_to_message.from_user.id == self.bot.user.id:
-            return ContinueHandling()
-        
         text = message.caption if message.content_type == 'photo' else message.text
         if text is None or len(text.strip()) == 0:
             return ContinueHandling() if message.content_type == 'photo' else CancelUpdate()
@@ -77,6 +71,12 @@ class AntiFlood(BaseMiddleware):
         if text[0] != '/': return CancelUpdate()
         command_name = text.strip().split()[0][1:] # Extract command name without '/'
         if command_name in self.free_commands:
+            return ContinueHandling()
+        
+        if not self.authenticate(chat_id, user_id, user_name):
+            return CancelUpdate()
+
+        if message.reply_to_message is not None and message.reply_to_message.from_user.id == self.bot.user.id:
             return ContinueHandling()
         
         print(f"Received command from chat_id {message.chat.id}, user {user_name} ({user_id}): {text}")
