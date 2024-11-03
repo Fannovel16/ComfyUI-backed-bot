@@ -34,7 +34,6 @@ bot.setup_middleware(middlewares.get_anti_flood(
     commands=COMMANDS,
     free_commands=FREE_COMMANDS,
     allowed_chat_ids=os.environ.get("ALLOWED_CHAT_IDS", '*'),
-    allowed_user_ids=os.environ.get("ALLOWED_USER_IDS", os.environ.get("ADMIN_USER_ID", '')),
     start_time=time.time(),
     window_limit_sec=int(os.environ.get("MESSAGE_WINDOW_RATE_LIMIT", '5')),
     temp_message_delay_sec=int(os.environ.get("TEMP_MESSAGE_LIFE", '5'))

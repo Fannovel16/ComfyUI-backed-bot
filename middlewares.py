@@ -7,7 +7,7 @@ import os
 ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
 
 class AntiFlood(BaseMiddleware):
-    def __init__(self, bot, commands, free_commands, allowed_chat_ids, allowed_user_ids, start_time, window_limit_sec, temp_message_delay_sec) -> None:
+    def __init__(self, bot, commands, free_commands, allowed_chat_ids, start_time, window_limit_sec, temp_message_delay_sec) -> None:
         self.start_time = start_time
         self.last_time = {}
         self.limit = window_limit_sec
