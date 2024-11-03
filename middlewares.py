@@ -12,7 +12,7 @@ class AntiFlood(BaseMiddleware):
         self.last_time = {}
         self.limit = window_limit_sec
         self.bot: TeleBot = bot
-        self.allowed_chat_ids = allowed_user_ids
+        self.allowed_chat_ids = allowed_chat_ids
         self.update_types = ['message']
         self.commands = commands
         self.free_commands = free_commands
