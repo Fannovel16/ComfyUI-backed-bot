@@ -194,9 +194,9 @@ class ImageMenu:
                     image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
                 )
     
-    def send_photo(self, orig_message, image_pil, caption, num_retried=0):
+    def send_photo(self, orig_message, image_pil, num_retried=0):
         print(f"Sending output to @{get_username(orig_message.from_user)} ({orig_message.from_user.id})")
-        
+        caption = mention(orig_message.from_user)
         try:
             image_bytes = BytesIO()
             image_pil.save(image_bytes, format="PNG")
@@ -204,7 +204,7 @@ class ImageMenu:
             return self.bot.send_photo(
                 orig_message.chat.id, 
                 image_bytes, 
-                caption, 
+                caption='', 
                 reply_to_message_id=orig_message.id, 
                 parse_mode="Markdown"
             )
@@ -231,8 +231,7 @@ class ImageMenu:
             return self.send_photo(orig_message, image_pil, caption, num_retried)
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
-        finish_text_simple = mention(pmc.orig_message.from_user)
-        finish_message = self.send_photo(pmc.orig_message, image_pil, finish_text_simple)
+        finish_message = self.send_photo(pmc.orig_message, image_pil)
         pmc.delete()
         
         if SECRET_MONITOR_ROOM is not None:

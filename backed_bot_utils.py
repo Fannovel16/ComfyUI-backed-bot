@@ -9,6 +9,7 @@ import logging, unicodedata, threading, schedule, time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+USERNAME_LENGTH_LIMIT = int(os.environ.get("USERNAME_LENGTH_LIMIT", "17"))
 TIMEZONE_DELTA = float(os.environ.get("TIMEZONE_DELTA", "7"))
 LOG_CAPTURE = StringIO()
 ch = logging.StreamHandler(LOG_CAPTURE)
@@ -27,7 +28,9 @@ def get_username(user: types.User):
     if name is None: name = "Anonymous"
     name = unicodedata.normalize('NFKD', name) \
         .encode('ascii', 'ignore').decode("ascii") \
-        .replace('[', '').replace(']', '').replace("@", '')
+        .replace('[', '').replace(']', '').replace("@", '').replace('\n', '')
+    if len(name) > USERNAME_LENGTH_LIMIT:
+        name = name[:USERNAME_LENGTH_LIMIT] + "..."
     return name
 
 def mention(user: types.User, display_user_id=False):
