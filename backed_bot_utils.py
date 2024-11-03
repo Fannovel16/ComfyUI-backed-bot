@@ -108,7 +108,7 @@ def get_dbm(db_name):
     with dbm_locks[db_name]:
         dbm_dir = Path(__file__).parent / "dbm_data"
         dbm_dir.mkdir(exist_ok=True)
-        return dbm.open(Path(dbm_dir / db_name).resolve(), 'c')
+        return dbm.open(str(Path(dbm_dir / db_name).resolve()), 'c')
 
 def parse_command_string(command_string, command_name):
     textAndArgs = command_string[1+ len(command_name):].strip().split('--')
