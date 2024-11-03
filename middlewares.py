@@ -1,7 +1,10 @@
 from telebot.handler_backends import BaseMiddleware, CancelUpdate, ContinueHandling
 from telebot import types, TeleBot
-from backed_bot_utils import get_username
+from backed_bot_utils import get_username, get_dbm
 import schedule
+import os
+
+ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
 
 class AntiFlood(BaseMiddleware):
     def __init__(self, bot, commands, free_commands, allowed_chat_ids, allowed_user_ids, start_time, window_limit_sec, temp_message_delay_sec) -> None:
@@ -9,18 +12,23 @@ class AntiFlood(BaseMiddleware):
         self.last_time = {}
         self.limit = window_limit_sec
         self.bot: TeleBot = bot
-        self.allowed_chat_ids = allowed_chat_ids
-        self.allowed_user_ids = allowed_user_ids
+        self.allowed_chat_ids = allowed_user_ids
         self.update_types = ['message']
         self.commands = commands
         self.free_commands = free_commands
         self.temp_message_delay_sec = temp_message_delay_sec
+    
+    @property
+    def allowed_user_ids(self):
+        with get_dbm("allowed_users") as allowed_users:
+            if len(ADMIN_USER_ID) and ADMIN_USER_ID not in allowed_users: allowed_users[ADMIN_USER_ID] = "Admin"
+            return ', '.join(user_id.decode() for user_id in allowed_users)
 
     def authenticate(self, chat_id, user_id, user_name):
-        if len(self.allowed_chat_ids.strip()) and chat_id not in self.allowed_chat_ids:
+        if self.allowed_chat_ids.strip() != '*' and chat_id not in self.allowed_chat_ids:
             print(f"Allowed chatids are: {self.allowed_chat_ids}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message.")
             return False
-        if len(self.allowed_user_ids.strip()) and user_id not in self.allowed_user_ids:
+        if '*' not in self.allowed_user_ids and user_id not in self.allowed_user_ids:
             print(f"Allowed userids are: {self.allowed_user_ids}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message.")
             return False
         return True

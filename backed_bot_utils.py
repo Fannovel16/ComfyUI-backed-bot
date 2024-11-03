@@ -101,10 +101,14 @@ def handle_exception(bot: TeleBot, orig_message: Optional[types.Message] = None)
     LOG_CAPTURE.truncate(0)
     LOG_CAPTURE.seek(0)
 
+dbm_locks = {}
 def get_dbm(db_name):
-    dbm_dir = Path(__file__).parent / "dbm_data"
-    dbm_dir.mkdir(exist_ok=True)
-    return dbm.open(Path(dbm_dir / db_name).resolve(), 'c')
+    if db_name not in dbm_locks:
+        dbm_locks[db_name] = threading.Lock()
+    with dbm_locks[db_name]:
+        dbm_dir = Path(__file__).parent / "dbm_data"
+        dbm_dir.mkdir(exist_ok=True)
+        return dbm.open(Path(dbm_dir / db_name).resolve(), 'c')
 
 def parse_command_string(command_string, command_name):
     textAndArgs = command_string[1+ len(command_name):].strip().split('--')
