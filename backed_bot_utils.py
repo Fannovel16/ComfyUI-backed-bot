@@ -101,8 +101,6 @@ def handle_exception(bot: TeleBot, orig_message: Optional[types.Message] = None)
         print(f"Error during command execution. See {date_str} for more details")
         telegram_reply_to(bot, orig_message, f"Error ({date_str}). Please retry again")
     
-    LOG_CAPTURE.truncate(0)
-    LOG_CAPTURE.seek(0)
 
 dbm_locks = {}
 def get_dbm(db_name):

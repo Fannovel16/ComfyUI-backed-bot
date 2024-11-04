@@ -100,8 +100,9 @@ class ImageMenu:
         @self.bot.callback_query_handler(func=lambda call: True)
         def callback_query(call: types.CallbackQuery):
             command, id = call.data.split('|')
-            pmc = PHOTO_MESSAGE_CHAINS[id]
-            if call.from_user.id != pmc.orig_message.from_user.id: return
+            pmc = PHOTO_MESSAGE_CHAINS.get(id)
+            if pmc is None or (call.from_user.id != pmc.orig_message.from_user.id):
+                return
             if command == "close":
                 pmc.auto_close_job.run()
                 return
@@ -144,8 +145,8 @@ class ImageMenu:
             orig_messsage = message.reply_to_message
             if not orig_messsage.text.startswith(INPUT_CHAIN_MESSAGE_PREFIX): return
             query, form, form_types = deserialize_input_chain_message(orig_messsage.text)
-            pmc = PHOTO_MESSAGE_CHAINS[form["id"]]
-            if message.from_user.id != pmc.orig_message.from_user.id: return
+            pmc = PHOTO_MESSAGE_CHAINS.get(form["id"])
+            if pmc is None or (message.from_user.id != pmc.orig_message.from_user.id): return
 
             if form_types[query] == "Photo":
                 if message.content_type != "photo":
@@ -234,8 +235,6 @@ class ImageMenu:
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
         finish_message = self.send_photo(pmc.orig_message, image_pil)
         pmc.delete()
-        if finish_message.photo is None:
-            return
         
         if SECRET_MONITOR_ROOM is not None:
             finish_text_full = concat_strings(
