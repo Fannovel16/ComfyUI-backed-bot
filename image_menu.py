@@ -210,7 +210,6 @@ class ImageMenu:
             )
         except:
             time.sleep(2)
-            pass
         try:
             image_bytes = BytesIO()
             image_pil.save(image_bytes, format="PNG")
