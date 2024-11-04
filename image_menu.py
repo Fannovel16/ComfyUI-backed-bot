@@ -221,20 +221,21 @@ class ImageMenu:
                 caption,
                 parse_mode="Markdown"
             )
-        except:
+        except Exception as e:
             time.sleep(2)
             num_retried += 1
             if num_retried > self.MAX_NUM_RETRIES:
-                return self.bot.send_message(
+                self.bot.send_message(
                     orig_message.chat.id, 
                     f"{mention(orig_message.from_user)} Failed to send output image. Please retry again",
                     parse_mode="Markdown"
                 )
+                raise e
             return self.send_photo(orig_message, image_pil, num_retried)
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
-        finish_message = self.send_photo(pmc.orig_message, image_pil)
         pmc.delete()
+        finish_message = self.send_photo(pmc.orig_message, image_pil)
         
         if SECRET_MONITOR_ROOM is not None:
             finish_text_full = concat_strings(
