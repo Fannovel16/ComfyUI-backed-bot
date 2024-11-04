@@ -63,7 +63,7 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
             image_output_callback(image_pil)
         else:
             image_bytes = BytesIO()
-            image_pil.save(image_bytes, format="PNG")
+            image_pil.save(image_bytes, format="JPEG", quality="web_high")
             image_bytes.seek(0)
             telegram_reply_to(self.bot, message, image_bytes)
     

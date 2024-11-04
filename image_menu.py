@@ -199,7 +199,7 @@ class ImageMenu:
         caption = mention(orig_message.from_user)
         try:
             image_bytes = BytesIO()
-            image_pil.save(image_bytes, format="PNG")
+            image_pil.save(image_bytes, format="JPEG", quality="web_high")
             image_bytes.seek(0)
             return self.bot.send_photo(
                 orig_message.chat.id, 
@@ -212,7 +212,7 @@ class ImageMenu:
             time.sleep(2)
         try:
             image_bytes = BytesIO()
-            image_pil.save(image_bytes, format="PNG")
+            image_pil.save(image_bytes, format="JPEG", quality="web_high")
             image_bytes.seek(0)
             return self.bot.send_photo(
                 orig_message.chat.id, 
@@ -234,6 +234,8 @@ class ImageMenu:
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
         finish_message = self.send_photo(pmc.orig_message, image_pil)
         pmc.delete()
+        if finish_message.photo is None:
+            return
         
         if SECRET_MONITOR_ROOM is not None:
             finish_text_full = concat_strings(
