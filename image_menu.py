@@ -209,6 +209,7 @@ class ImageMenu:
                 parse_mode="Markdown"
             )
         except:
+            time.sleep(2)
             pass
         try:
             image_bytes = BytesIO()
@@ -221,6 +222,7 @@ class ImageMenu:
                 parse_mode="Markdown"
             )
         except:
+            time.sleep(2)
             num_retried += 1
             if num_retried > self.MAX_NUM_RETRIES:
                 return self.bot.send_message(
@@ -228,7 +230,7 @@ class ImageMenu:
                     f"{mention(orig_message.from_user)} Failed to send output image. Please retry again",
                     parse_mode="Markdown"
                 )
-            return self.send_photo(orig_message, image_pil, caption, num_retried)
+            return self.send_photo(orig_message, image_pil, num_retried)
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
         finish_message = self.send_photo(pmc.orig_message, image_pil)
