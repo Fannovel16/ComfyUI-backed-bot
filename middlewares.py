@@ -41,8 +41,8 @@ class AntiFloodMiddleware(BaseMiddleware):
                     print(f"User {user_name} ({user_id}) is advanced")
                     return True
             
-            if chat_id not in self.allowed_chat_ids:
-                print(f"Allowed chatids are: {list(self.allowed_chat_ids)}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message")
+            if '*' not in self.allowed_chat_ids and chat_id not in self.allowed_chat_ids:
+                print(f"Allowed chatids are: {self.allowed_chat_ids}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message")
                 return False
 
             if '*' in allowed_users:
@@ -98,14 +98,16 @@ class AntiFloodMiddleware(BaseMiddleware):
             else:
                 return CancelUpdate()
         
-        print(f"Received command from chat_id {message.chat.id}, user {user_name} ({user_id}): {text}")
-        if command in self.free_commands:
-            return ContinueHandling()
         if command is None:
             if message.reply_to_message is not None and message.reply_to_message.from_user.id == self.bot.user.id:
                 return ContinueHandling()
             else:
                 return CancelUpdate()
+        
+        print(f"Received command from chat_id {message.chat.id}, user {user_name} ({user_id}): {text}")
+        if command in self.free_commands:
+            return ContinueHandling()
+
         if command not in self.commands:
             print(f"Command {command} not defined. Current available commands: {', '.join(self.commands)}")
             return CancelUpdate()
