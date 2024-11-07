@@ -43,7 +43,7 @@ class AntiFloodMiddleware(BaseMiddleware):
             
             if chat_id not in self.allowed_chat_ids:
                 print(f"Allowed chatids are: {list(self.allowed_chat_ids)}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message")
-                return True
+                return False
 
             if '*' in allowed_users:
                 return True

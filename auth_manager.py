@@ -67,7 +67,8 @@ class AuthManager:
             advanced_infos = {user_id: allowed_users[user_id].advanced_info for user_id in allowed_users}
         for user_id, advance_info in advanced_infos.items():
             AutoRevokeAdvanced.cancel(user_id)
-            AutoRevokeAdvanced.create_job(user_id, advance_info.duration_days)
+            if advance_info is not None:
+                AutoRevokeAdvanced.create_job(user_id, advance_info.duration_days)
     
     @classmethod
     def check_admin(cls, message, do_task):
