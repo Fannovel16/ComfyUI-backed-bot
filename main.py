@@ -4,13 +4,12 @@ import dotenv;dotenv.load_dotenv()
 
 from preprocess import preprocess
 from worker import ComfyWorker
-from backed_bot_utils import parse_command_string, start_schedule_thread, handle_exception
+from backed_bot_utils import parse_command_string, handle_exception
 from special_commands import SPECIAL_COMMANDS
 from telebot import types, TeleBot, logger, logging, ExceptionHandler
 from image_menu import ImageMenu
 import middlewares, time
 
-start_schedule_thread()
 COMMANDS = preprocess(
     ["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput", "AppIO_ImageInputFromID"]
     + os.environ.get("NODES_TO_CACHE", '').split(',')

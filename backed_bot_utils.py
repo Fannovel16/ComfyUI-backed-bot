@@ -2,7 +2,7 @@ import typing
 import traceback
 from pathlib import Path
 from io import BytesIO, StringIO
-import dbm, os
+import shelve, os
 from telebot import TeleBot, types, logger
 from contextlib import contextmanager
 import logging, unicodedata, threading, schedule, time
@@ -100,7 +100,6 @@ def handle_exception(bot: TeleBot, orig_message: Optional[types.Message] = None)
             )
         print(f"Error during command execution. See {date_str} for more details")
         telegram_reply_to(bot, orig_message, f"Error ({date_str}). Please retry again")
-    
 
 dbm_locks = {}
 def get_dbm(db_name):
@@ -109,7 +108,7 @@ def get_dbm(db_name):
     with dbm_locks[db_name]:
         dbm_dir = Path(__file__).parent / "dbm_data"
         dbm_dir.mkdir(exist_ok=True)
-        return dbm.open(str(Path(dbm_dir / db_name).resolve()), 'c')
+        return shelve.open(str(Path(dbm_dir / db_name).resolve()), 'c')
 
 def parse_command_string(command_string, command_name):
     textAndArgs = command_string[1+ len(command_name):].strip().split('--')
@@ -161,3 +160,4 @@ def start_schedule_thread():
             schedule.run_pending()
             time.sleep(1)
     threading.Thread(target=loop).start()
+start_schedule_thread()
