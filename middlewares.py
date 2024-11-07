@@ -50,6 +50,7 @@ class AntiFloodMiddleware(BaseMiddleware):
             if user_id not in allowed_users:
                 print(f"Allowed userids are: {list(allowed_users.keys())}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message.")
                 return False
+            return True
     
     def check(self, user_id, message):
         if not user_id in self.last_time:
