@@ -39,7 +39,7 @@ class AutoRevokeAdvanced:
         revoke_date = advanced_info.start_date + timedelta(days=advanced_info.duration_days)
         remain_seconds = (revoke_date - datetime.now()).total_seconds()
         if remain_seconds < 0:
-            cls.update_user_info(allowed_users, user_id, advanced_info=None)
+            AuthManager.update_user_info(allowed_users, user_id, advanced_info=None)
             return cls.cancel(user_id)
         cls.jobs[user_id] = schedule.every(remain_seconds).seconds.do(job_func, user_id)
         return cls.jobs[user_id]
