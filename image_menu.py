@@ -143,7 +143,7 @@ class ImageMenu:
         @self.bot.message_handler(func=lambda message: message.reply_to_message is not None, content_types=["text", "photo"])
         def input_chain(message: types.Message):
             orig_messsage = message.reply_to_message
-            if not orig_messsage.text.startswith(INPUT_CHAIN_MESSAGE_PREFIX): return
+            if not orig_messsage.get("text", '').startswith(INPUT_CHAIN_MESSAGE_PREFIX): return
             query, form, form_types = deserialize_input_chain_message(orig_messsage.text)
             pmc = PHOTO_MESSAGE_CHAINS.get(form["id"])
             if pmc is None or (message.from_user.id != pmc.orig_message.from_user.id): return

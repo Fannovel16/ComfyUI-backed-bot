@@ -22,7 +22,7 @@ class UserInfo:
 class AutoRevokeAdvanced:
     jobs: dict[str, schedule.Job] = {}
     @classmethod
-    def create_job(cls, user_id: str, days: float):
+    def create_job(cls, allowed_users: dict[str, UserInfo], user_id: str):
         def job_func(user_id):
             with AuthManager.allowed_user_dbm() as allowed_users:
                 allowed_users: dict[str, UserInfo]
@@ -33,7 +33,15 @@ class AutoRevokeAdvanced:
                 del cls.jobs[user_id]
                 return schedule.CancelJob
         
-        cls.jobs[user_id] = schedule.every(days).days.do(job_func, user_id)
+        if user_id not in allowed_users or allowed_users[user_id].advanced_info is None:
+            return cls.cancel(user_id)
+        advanced_info = allowed_users[user_id].advanced_info
+        revoke_date = advanced_info.start_date + timedelta(days=advanced_info.duration_days)
+        remain_seconds = (revoke_date - datetime.now()).total_seconds()
+        if remain_seconds < 0:
+            cls.update_user_info(allowed_users, user_id, advanced_info=None)
+            return cls.cancel(user_id)
+        cls.jobs[user_id] = schedule.every(remain_seconds).seconds.do(job_func, user_id)
         return cls.jobs[user_id]
     
     @classmethod
@@ -61,14 +69,11 @@ class AuthManager:
     
     @classmethod
     def warmup(cls):
-        # Avoid two dbm context as the same time
         with cls.allowed_user_dbm() as allowed_users:
             allowed_users: dict[str, UserInfo]
-            advanced_infos = {user_id: allowed_users[user_id].advanced_info for user_id in allowed_users}
-        for user_id, advance_info in advanced_infos.items():
-            AutoRevokeAdvanced.cancel(user_id)
-            if advance_info is not None:
-                AutoRevokeAdvanced.create_job(user_id, advance_info.duration_days)
+            for user_id in allowed_users:
+                AutoRevokeAdvanced.cancel(user_id)
+                AutoRevokeAdvanced.create_job(allowed_users, user_id)
     
     @classmethod
     def check_admin(cls, message, do_task):
@@ -177,10 +182,9 @@ class AuthManager:
                 if not allowed_users[user_id].is_allowed:
                     text += f"User `{user_id[1:]}` is banned, therefore can't become an advanced user\n"
                     continue
-                # Avoid double dbm contexts
                 AutoRevokeAdvanced.cancel(user_id)
                 cls.update_user_info(allowed_users, user_id, advanced_info=AdvancedInfo(datetime.now(), days))
-                AutoRevokeAdvanced.create_job(user_id, days)
+                AutoRevokeAdvanced.create_job(allowed_users, user_id)
             text += cls.serialize_allowed_users(allowed_users)
             bot.reply_to(message, text, parse_mode="Markdown")
 

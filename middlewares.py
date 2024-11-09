@@ -27,7 +27,8 @@ class AntiFloodMiddleware(BaseMiddleware):
         with AuthManager.allowed_user_dbm() as allowed_users:
             user_info: UserInfo = allowed_users.get(user_id, None)
             if user_info is not None and user_info.name == "Name_Unknown":
-                user_info.name = user_name
+                user_info.name = get_username(message.from_user)
+                allowed_users[user_id] = user_info
             
             if user_info is not None and not user_info.is_allowed:
                 print(f"User {user_id} is banned! Skipping message")
@@ -84,7 +85,6 @@ class AntiFloodMiddleware(BaseMiddleware):
     def pre_process(self, message: types.Message, data):
         user_id = str(message.from_user.id)
         user_name = get_username(message.from_user)
-        is_allowed = self.authenticate(message)
         text = message.caption if message.content_type == 'photo' else message.text
         command = self.get_command(text)
 
@@ -93,7 +93,7 @@ class AntiFloodMiddleware(BaseMiddleware):
             return CancelUpdate()
         
         if message.content_type == 'photo':
-            if is_allowed:
+            if self.authenticate(message):
                 return ContinueHandling()
             else:
                 return CancelUpdate()
@@ -110,6 +110,8 @@ class AntiFloodMiddleware(BaseMiddleware):
 
         if command not in self.commands:
             print(f"Command {command} not defined. Current available commands: {', '.join(self.commands)}")
+            return CancelUpdate()
+        if not self.authenticate(message):
             return CancelUpdate()
         return self.check(user_id, message)
         

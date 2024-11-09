@@ -127,12 +127,15 @@ class NodeProgressBar:
         self.stream.seek(0)
         self.pbar.n = current
         self.pbar.refresh()
-        self.bot.edit_message_text(
-            self.orig_text + f"\n\n```{self.stream.getvalue()}\n```",
-            self.message.chat.id,
-            self.message.id,
-            parse_mode="Markdown"
-        )
+        try:
+            self.bot.edit_message_text(
+                self.orig_text + f"\n\n```{self.stream.getvalue()}\n```",
+                self.message.chat.id,
+                self.message.id,
+                parse_mode="Markdown"
+            )
+        except:
+            pass
 
 class ComfyWorker:
     def __init__(self, bot: TeleBot):
