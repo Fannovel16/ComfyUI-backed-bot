@@ -87,7 +87,7 @@ class ImageMenu:
         markup.row_width = 3
         with ComfyCommandManager.command_dbm() as cmds_advanced:
             btns = [types.InlineKeyboardButton(
-                    ('💎' if is_user_advanced else '💎🔒') if cmds_advanced[command] else '' + command, 
+                    (('💎' if is_user_advanced else '💎🔒') if cmds_advanced[command] else '') + command, 
                     callback_data=f"{command}|{id}") 
                 for command in command_input_nodes.keys()]
             markup.add(*btns)
