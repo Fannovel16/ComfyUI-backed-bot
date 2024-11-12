@@ -6,6 +6,7 @@ from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor, Future
 from queue import Queue
 import os, schedule, time, middlewares
+from auth_manager import AuthManager, UserInfo, ComfyCommandManager
 
 SECRET_MONITOR_ROOM = os.environ.get("SECRET_MONITOR_ROOM", None)
 
@@ -73,11 +74,23 @@ class ImageMenu:
         print(f"Sending image menu to @{get_username(message.from_user)} ({message.from_user.id})")
 
         command_input_nodes = analyze_argument_from_preprocessed()
+        user_id = str(message.from_user.id)
         id = str(message.id)
         pmc = PhotoMessageChain(id, self.bot, message, [])
+        
+        with AuthManager.allowed_user_dbm() as allowed_users:
+            if user_id not in allowed_users:
+                is_user_advanced = allowed_users[user_id].advanced_info is not None
+            else:
+                is_user_advanced = False
         markup = types.InlineKeyboardMarkup()
         markup.row_width = 3
-        markup.add(*[types.InlineKeyboardButton(command, callback_data=f"{command}|{id}") for command in command_input_nodes.keys()])
+        with ComfyCommandManager.command_dbm() as cmds_advanced:
+            btns = [types.InlineKeyboardButton(
+                    ('🔒' if cmds_advanced[command] and not is_user_advanced else '') + command, 
+                    callback_data=f"{command}|{id}") 
+                for command in command_input_nodes.keys()]
+            markup.add(*btns)
         markup.add(types.InlineKeyboardButton("close", callback_data=f"close|{id}"))
         reply_text = concat_strings(
             mention(message.from_user),
@@ -109,6 +122,26 @@ class ImageMenu:
             if pmc.orig_message.chat.type != "private":
                 signal = self.anti_flood.check(call.from_user.id, call.message)
                 if type(signal) == middlewares.CancelUpdate: return
+            with AuthManager.allowed_user_dbm() as allowed_users, ComfyCommandManager.command_dbm() as cmds_advanced:
+                allowed_users: dict[str, UserInfo]
+                user_id = str(pmc.orig_message.from_user.id)
+                user_info = allowed_users[user_id]
+                if user_info.advanced_info is None:
+                    notify_message = None
+                    if cmds_advanced[command]:
+                        reply_text = "Acc free khong xai tinh nang nang cao duoc. Lien he thang admin de xin.\nFree account can't use advanced features. Contact admin."
+                        notify_message = self.bot.reply_to(pmc.orig_message, reply_text)
+                    elif user_info.remain_normal_uses <= 0:
+                        reply_text = "Het xai free duoc roi. Lien he thang admin de xin.\nNo free use left! Contact admin."
+                        notify_message = self.bot.reply_to(pmc.orig_message, reply_text)
+                    if notify_message is not None:
+                        def auto_delete():
+                            self.bot.delete_message(notify_message.chat.id, notify_message.id)
+                            return schedule.CancelJob
+                        schedule.every(10).seconds.do(auto_delete)
+                        return
+                    remain_normal_uses = min(user_info.remain_normal_uses - 1, 0)
+                    AuthManager.update_user_info(allowed_users, user_id, remain_normal_uses=remain_normal_uses)
 
             print(f"@{get_username(call.from_user)} ({call.from_user.id}) called {command}")
             command_input_nodes = analyze_argument_from_preprocessed()
@@ -134,7 +167,7 @@ class ImageMenu:
                 pmc.append(pbar_message)
                 self.worker.execute(
                     form["command"],
-                    pmc.orig_message, form, 
+                    pmc.orig_message, form,
                     pbar_message=pbar_message if pbar_message.chat.type == "private" else None, 
                     image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
                 )

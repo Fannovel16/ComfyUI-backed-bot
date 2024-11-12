@@ -4,7 +4,7 @@ from backed_bot_utils import telegram_reply_to, handle_exception, get_username, 
 from PIL import Image
 from io import BytesIO
 import os
-from middlewares import AuthManager
+from auth_manager import AuthManager, ComfyCommandManager
 
 ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
 
@@ -54,5 +54,8 @@ SPECIAL_COMMANDS = {
     "add_allowed": AuthManager.add_allowed,
     "remove_allowed": AuthManager.remove_allowed,
     "add_advanced": AuthManager.add_advanced,
-    "remove_advanced": AuthManager.remove_advanced
+    "remove_advanced": AuthManager.remove_advanced,
+    "set_normal_uses": AuthManager.set_normal_uses,
+    "get_commands": ComfyCommandManager.get_commands,
+    "set_commands": ComfyCommandManager.set_commands
 }

@@ -9,16 +9,21 @@ from special_commands import SPECIAL_COMMANDS
 from telebot import types, TeleBot, logger, logging, ExceptionHandler
 from image_menu import ImageMenu
 import middlewares, time
+from auth_manager import warmup
 
+# Disabled by default as the the contractor deems unnecessary
+ENABLE_COMMANDS = int(os.environ.get("ENABLE_COMMANDS", "0"))
 COMMANDS = preprocess(
     ["AppIO_StringInput", "AppIO_StringOutput", "AppIO_ImageInput", "AppIO_ImageOutput", "AppIO_IntegerInput", "AppIO_IntegerInput", "AppIO_ImageInputFromID"]
     + os.environ.get("NODES_TO_CACHE", '').split(',')
 )
+if not ENABLE_COMMANDS:
+    COMMANDS = []
 COMMANDS.extend(SPECIAL_COMMANDS.keys())
 COMMANDS.extend(["image_menu"])
 FREE_COMMANDS = ["get_ids"]
-# Disabled by default as the the contractor deems unnecessary
-ENABLE_COMMANDS = int(os.environ.get("ENABLE_COMMANDS", "0"))
+warmup()
+
 if int(os.environ.get("TELEBOT_DEBUG", "0")):
     logger.setLevel(logging.DEBUG)
 
@@ -32,7 +37,7 @@ bot.setup_middleware(middlewares.get_anti_flood(
     bot=bot,
     commands=COMMANDS,
     free_commands=FREE_COMMANDS,
-    allowed_chat_ids=os.environ.get("ALLOWED_CHAT_IDS", '*'),
+    allowed_chat_ids=os.environ.get("ALLOWED_CHAT_IDS", '*').split(','),
     start_time=time.time(),
     window_limit_sec=int(os.environ.get("MESSAGE_WINDOW_RATE_LIMIT", '5')),
     temp_message_delay_sec=int(os.environ.get("TEMP_MESSAGE_LIFE", '5'))

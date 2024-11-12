@@ -136,8 +136,13 @@ def get_input_nodes(preprocessed_code):
             appio_nodes[node_id] = InputNode(node_class, arguments)
     return appio_nodes
 
+command_input_nodes = None
 def analyze_argument_from_preprocessed():
-    command_input_nodes = {}
+    global command_input_nodes
+    if command_input_nodes is not None:
+        return command_input_nodes
+    else:
+        command_input_nodes = {}
     for workflow_py in preprocessed_dir.iterdir():
         if workflow_py.stem.startswith("__"): continue
         command_input_nodes[workflow_py.stem.replace("appio_", '')] = get_input_nodes(workflow_py.read_text(encoding="utf-8"))
