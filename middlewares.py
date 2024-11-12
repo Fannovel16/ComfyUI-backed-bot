@@ -47,6 +47,8 @@ class AntiFloodMiddleware(BaseMiddleware):
                 return False
 
             if '*' in allowed_users:
+                if user_id not in allowed_users:
+                    allowed_users[user_id] = UserInfo(user_id, "Name_Unknown")
                 return True
             if user_id not in allowed_users:
                 print(f"Allowed userids are: {list(allowed_users.keys())}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message.")
