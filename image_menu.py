@@ -1,9 +1,9 @@
 from telebot import types, TeleBot
-from preprocess import analyze_argument_from_preprocessed, serialize_input_nodes, deserialize_input_chain_message
+from preprocess import analyze_argument_from_preprocessed, serialize_input_nodes, deserialize_input_chain_message, get_command_display_names
 from dataclasses import dataclass
 from backed_bot_utils import mention, get_username
 from io import BytesIO
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 import os, schedule, time, middlewares
 from auth_manager import AuthManager, UserInfo, ComfyCommandManager
@@ -73,23 +73,23 @@ class ImageMenu:
             if type(signal) == middlewares.CancelUpdate: return
         print(f"Sending image menu to @{get_username(message.from_user)} ({message.from_user.id})")
 
-        command_input_nodes = analyze_argument_from_preprocessed()
+        cmd_display_names = get_command_display_names()
         user_id = str(message.from_user.id)
         id = str(message.id)
         pmc = PhotoMessageChain(id, self.bot, message, [])
         
         with AuthManager.allowed_user_dbm() as allowed_users:
-            if user_id not in allowed_users:
+            if user_id in allowed_users:
                 is_user_advanced = allowed_users[user_id].advanced_info is not None
             else:
                 is_user_advanced = False
         markup = types.InlineKeyboardMarkup()
-        markup.row_width = 3
+        markup.row_width = 2
         with ComfyCommandManager.command_dbm() as cmds_advanced:
             btns = [types.InlineKeyboardButton(
-                    (('💎' if is_user_advanced else '💎🔒') if cmds_advanced[command] else '') + command, 
-                    callback_data=f"{command}|{id}") 
-                for command in command_input_nodes.keys()]
+                    (('' if is_user_advanced else '🔒') if cmds_advanced[cmd] else '') + display_name, 
+                    callback_data=f"{cmd}|{id}") 
+                for cmd, display_name in cmd_display_names.items()]
             markup.add(*btns)
         markup.add(types.InlineKeyboardButton("close", callback_data=f"close|{id}"))
         reply_text = concat_strings(
@@ -176,7 +176,8 @@ class ImageMenu:
         @self.bot.message_handler(func=lambda message: message.reply_to_message is not None, content_types=["text", "photo"])
         def input_chain(message: types.Message):
             orig_messsage = message.reply_to_message
-            if not orig_messsage.get("text", '').startswith(INPUT_CHAIN_MESSAGE_PREFIX): return
+            text = orig_messsage.text or ''
+            if not text.startswith(INPUT_CHAIN_MESSAGE_PREFIX): return
             query, form, form_types = deserialize_input_chain_message(orig_messsage.text)
             pmc = PHOTO_MESSAGE_CHAINS.get(form["id"])
             if pmc is None or (message.from_user.id != pmc.orig_message.from_user.id): return

@@ -3,7 +3,7 @@ preprocessed
 .env
 comfyui.log
 comfyui.*.log
-python_workflows/*.py
+python_workflows/*
 .ipynb_checkpoints
 error_logs/*.txt
 dbm_data/*

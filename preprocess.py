@@ -2,6 +2,7 @@ from pathlib import Path
 import shutil
 import re, ast
 from dataclasses import dataclass
+import yaml
 
 py_workflows_dir = Path(__file__, '..' , 'python_workflows').resolve()
 py_workflows_dir.mkdir(exist_ok=True)
@@ -87,6 +88,7 @@ def preprocess(hooks):
     commands = []
     for workflow_py in py_workflows_dir.iterdir():
         if workflow_py.name.startswith('.'): continue #E.g. .ipynb_checkpoints
+        if workflow_py.suffix != '.py': continue
         code = workflow_py.read_text(encoding="utf-8")
         start_duplicated, end_duplicated = code.index("def find_path"), code.index("def main")
         code = code[:start_duplicated] + code[end_duplicated:]
@@ -147,6 +149,14 @@ def analyze_argument_from_preprocessed():
         if workflow_py.stem.startswith("__"): continue
         command_input_nodes[workflow_py.stem.replace("appio_", '')] = get_input_nodes(workflow_py.read_text(encoding="utf-8"))
     return command_input_nodes
+
+def get_command_display_names():
+    commands = list(analyze_argument_from_preprocessed().keys())
+    name_file = Path(py_workflows_dir, "name.yaml")
+    if name_file.exists():
+        return yaml.safe_load(name_file.read_text(encoding="utf-8"))
+    else:
+        return {cmd: cmd for cmd in commands}
 
 def serialize_input_nodes(command: str, id: str, prompt: str, input_nodes: list[InputNode]):
     argument_types = {
