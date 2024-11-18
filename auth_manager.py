@@ -79,7 +79,7 @@ class AuthManager:
         if "advanced_info" in kwargs:
             user_info.advanced_info = kwargs["advanced_info"]
         if "remain_normal_uses" in kwargs:
-            user_info.remain_normal_uses = kwargs["remain_normal_uses"]
+            user_info.remain_normal_uses = int(kwargs["remain_normal_uses"])
         allowed_users[user_id] = user_info
     
     @classmethod
@@ -93,6 +93,7 @@ class AuthManager:
         for user_id in allowed_users:
             AutoRevokeAdvanced.cancel(user_id)
             AutoRevokeAdvanced.create_job(allowed_users, user_id)
+            AuthManager.update_user_info(cls.allowed_users, user_id, remain_normal_uses=int(allowed_users[user_id].remain_normal_uses))
     
     @classmethod
     def check_admin(cls, message, do_task):
