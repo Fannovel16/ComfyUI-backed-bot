@@ -270,7 +270,7 @@ class AuthManager:
                 bot.reply_to(message, "Set normal uses for everyone requires explicit number")
                 return
             _, uses = user_id_use
-            DefaultNormalUses.set(uses)
+            DefaultNormalUses.set(int(uses))
             default_normal_uses = DefaultNormalUses.get()
             allowed_users: dict[str, UserInfo] = cls.allowed_users
             user_id_uses = [(id.strip(), default_normal_uses) for id in allowed_users]

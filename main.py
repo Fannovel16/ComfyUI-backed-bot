@@ -48,7 +48,8 @@ SPECIAL_COMMANDS["image_menu"] = image_menu.image_menu
 
 @bot.message_handler(["get_ids"])
 def get_ids(message: types.Message):
-    bot.reply_to(message, f"Chat ID: {message.chat.id}, User ID: {message.from_user.id}")
+    _message = message.reply_to_message or message
+    bot.reply_to(message, f"Chat ID: {_message.chat.id}, User ID: {_message.from_user.id}")
 
 @bot.message_handler(func=lambda message: message.reply_to_message is None, content_types=["text", "photo"])
 def main(message: types.Message):

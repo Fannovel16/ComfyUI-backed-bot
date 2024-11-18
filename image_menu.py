@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from backed_bot_utils import mention, get_username
 from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
-from queue import Queue
 import os, schedule, time, middlewares
 from auth_manager import AuthManager, UserInfo, ComfyCommandManager
 
@@ -64,7 +63,7 @@ class ImageMenu:
         self.menu_executor = DelayedExecutor(5)
         self.menu_callback_executor = DelayedExecutor(3)
         self.create_handlers()
-        self.MAX_NUM_RETRIES = 2
+        self.MAX_NUM_RETRIES = 3
 
     def image_menu(self, _, message: types.Message, parsed_data: dict):
         if message.content_type != "photo": return
@@ -76,7 +75,7 @@ class ImageMenu:
         cmd_display_names = get_command_display_names()
         user_id = str(message.from_user.id)
         id = str(message.id)
-        pmc = PhotoMessageChain(id, self.bot, message, [])
+        pmc = PhotoMessageChain(id, self.bot, message, [message])
         
         allowed_users: dict[str, UserInfo] = AuthManager.allowed_users
         if user_id in allowed_users:
@@ -84,14 +83,13 @@ class ImageMenu:
         else:
             is_user_advanced = False
         markup = types.InlineKeyboardMarkup()
-        markup.row_width = 2
         cmds_advanced: dict[str, bool] = ComfyCommandManager.command_manager
         btns = [types.InlineKeyboardButton(
                 (('' if is_user_advanced else '🔒') if cmds_advanced[cmd] else '') + display_name, 
                 callback_data=f"{cmd}|{id}") 
             for cmd, display_name in cmd_display_names.items()]
-        markup.add(*btns)
-        markup.add(types.InlineKeyboardButton("close", callback_data=f"close|{id}"))
+        markup.add(*btns, row_width=2)
+        markup.add(types.InlineKeyboardButton("close", callback_data=f"close|{id}"), row_width=1)
         reply_text = concat_strings(
             mention(message.from_user),
             f"IMAGE MENU (auto deleted after 30s) - Prompt: `{pmc.prompt}`",
@@ -130,11 +128,11 @@ class ImageMenu:
             if user_info.advanced_info is None:
                 notify_message = None
                 if cmds_advanced[command]:
-                    reply_text = "Acc free khong xai tinh nang nang cao duoc. Lien he thang admin de xin.\nFree account can't use advanced features. Contact admin."
-                    notify_message = self.bot.reply_to(pmc.orig_message, reply_text)
+                    reply_text = f"{mention(pmc.orig_message.from_user)} Acc free khong xai tinh nang nang cao duoc. Lien he thang admin de xin.\nFree account can't use advanced features. Contact admin."
+                    notify_message = self.bot.send_message(pmc.orig_message.chat.id, reply_text, parse_mode="Markdown")
                 elif user_info.remain_normal_uses <= 0:
-                    reply_text = "Het xai free duoc roi. Lien he thang admin de xin.\nNo free use left! Contact admin."
-                    notify_message = self.bot.reply_to(pmc.orig_message, reply_text)
+                    reply_text = f"{mention(pmc.orig_message.from_user)} Het xai free duoc roi. Lien he thang admin de xin.\nNo free use left! Contact admin."
+                    notify_message = self.bot.send_message(pmc.orig_message.chat.id, reply_text, parse_mode="Markdown")
                 if notify_message is not None:
                     def auto_delete():
                         self.bot.delete_message(notify_message.chat.id, notify_message.id)
@@ -149,21 +147,23 @@ class ImageMenu:
             serialized_form = serialize_input_nodes(command, id, pmc.prompt, command_input_nodes[command].values())
             _, form, form_types = deserialize_input_chain_message(serialized_form)
             keys = list(form.keys())
+            mention_str = mention(pmc.orig_message.from_user)
             if len(keys) > 3:
                 prompt = f"{form_types[keys[3]]} `{keys[3]}`?"
                 reply_text = concat_strings(
                     INPUT_CHAIN_MESSAGE_PREFIX,
+                    mention_str,
                     title_pad(),
                     serialized_form.replace('`', ''),
                     sep(),
                     prompt
                 )
-                pmc.append(self.bot.reply_to(pmc.orig_message, reply_text, reply_markup=force_reply, parse_mode="Markdown"))
+                pmc.append(self.bot.send_message(pmc.orig_message.chat.id, reply_text, reply_markup=force_reply, parse_mode="Markdown"))
             else:
                 pmc.delete()
                 pbar_message = self.menu_callback_executor(
                     pmc.orig_message.chat,
-                    lambda: self.bot.reply_to(pmc.orig_message, "Executing...", parse_mode="Markdown")
+                    lambda: self.bot.send_message(pmc.orig_message.chat.id, f"{mention_str} Executing...", parse_mode="Markdown")
                 )
                 pmc.append(pbar_message)
                 self.worker.execute(
@@ -182,6 +182,7 @@ class ImageMenu:
             query, form, form_types = deserialize_input_chain_message(orig_messsage.text)
             pmc = PHOTO_MESSAGE_CHAINS.get(form["id"])
             if pmc is None or (message.from_user.id != pmc.orig_message.from_user.id): return
+            pmc.append(message)
 
             if form_types[query] == "Photo":
                 if message.content_type != "photo":
@@ -198,13 +199,14 @@ class ImageMenu:
                 prompt = f"{form_types[remain_keys[0]]} `{remain_keys[0]}`?"
                 reply_text = concat_strings(
                     INPUT_CHAIN_MESSAGE_PREFIX,
+                    mention(pmc.orig_message.from_user),
                     title_pad(),
                     serialized_form.replace('`', ''),
                     sep(),
                     prompt
                 )
                 pmc.append(
-                    self.bot.reply_to(pmc.orig_message, reply_text, reply_markup=force_reply, parse_mode="Markdown")
+                    self.bot.send_message(pmc.orig_message.chat.id, reply_text, reply_markup=force_reply, parse_mode="Markdown")
                 )
                 
             else:
@@ -213,14 +215,14 @@ class ImageMenu:
                     for k, v in form.items() if (k != "id" and form_types[k] != "Photo")
                 ])
                 reply_text = concat_strings(
-                    "Form completed!",
+                    f"{mention(pmc.orig_message.from_user)} Form completed!",
                     title_pad(),
                     serialized_form.replace('`', ''),
                     sep(),
                     "Executing..."
                 )
                 pmc.delete()
-                pbar_message = self.bot.reply_to(pmc.orig_message, reply_text, parse_mode="Markdown")
+                pbar_message = self.bot.send_message(pmc.orig_message.chat.id, reply_text, parse_mode="Markdown")
                 pmc.append(pbar_message)
                 self.worker.execute(
                     form["command"], 
@@ -232,37 +234,26 @@ class ImageMenu:
     
     def send_photo(self, orig_message, image_pil, num_retried=0):
         print(f"Sending output to @{get_username(orig_message.from_user)} ({orig_message.from_user.id})")
-        caption = mention(orig_message.from_user)
+        mention_str = mention(orig_message.from_user)
         try:
             image_bytes = BytesIO()
-            image_pil.save(image_bytes, format="JPEG", quality="web_high")
+            image_pil.save(image_bytes, format="PNG")
             image_bytes.seek(0)
-            return self.bot.send_photo(
-                orig_message.chat.id, 
-                image_bytes, 
-                caption='', 
-                reply_to_message_id=orig_message.id, 
-                parse_mode="Markdown"
+            input_photo = types.InputMediaPhoto(max(orig_message.photo, key=lambda p:p.width).file_id)
+            output_photo = types.InputMediaPhoto(image_bytes)
+            
+            return self.bot.send_media_group(
+                orig_message.chat.id,
+                [input_photo, output_photo]
             )
-        except:
-            time.sleep(2)
-        try:
-            image_bytes = BytesIO()
-            image_pil.save(image_bytes, format="JPEG", quality="web_high")
-            image_bytes.seek(0)
-            return self.bot.send_photo(
-                orig_message.chat.id, 
-                image_bytes, 
-                caption,
-                parse_mode="Markdown"
-            )
+        
         except Exception as e:
             time.sleep(2)
             num_retried += 1
             if num_retried > self.MAX_NUM_RETRIES:
                 self.bot.send_message(
                     orig_message.chat.id, 
-                    f"{mention(orig_message.from_user)} Failed to send output image. Please retry again",
+                    f"{mention_str} Failed to send output image. Please retry again",
                     parse_mode="Markdown"
                 )
                 raise e
@@ -270,25 +261,21 @@ class ImageMenu:
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
         pmc.delete()
-        finish_message = self.send_photo(pmc.orig_message, image_pil)
+        finish_messages = self.send_photo(pmc.orig_message, image_pil)
         
         if SECRET_MONITOR_ROOM is not None:
             finish_text_full = concat_strings(
                 mention(pmc.orig_message.from_user, True),
                 title_pad(),
                 serialized_form.replace('`', ''),
-                sep(),
-                "Input image"
+                sep()
             )
-            input_image_message = self.bot.send_photo(
+            message = self.bot.send_message(SECRET_MONITOR_ROOM, finish_text_full, parse_mode="Markdown")
+            self.bot.send_media_group(
                 SECRET_MONITOR_ROOM,
-                min(pmc.orig_message.photo, key=lambda p:p.width).file_id,
-                finish_text_full,
-                parse_mode="Markdown"
-            )
-            self.bot.send_photo(
-                input_image_message.chat.id,
-                min(finish_message.photo, key=lambda p:p.width).file_id,
-                "Output image",
-                reply_to_message_id=input_image_message.id
+                [
+                    types.InputMediaPhoto(min(message.photo, key=lambda p:p.width).file_id)
+                    for message in finish_messages
+                ],
+                reply_to_message_id=message.id
             )

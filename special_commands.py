@@ -41,7 +41,7 @@ def get_image_id(bot: TeleBot, message: types.Message, parsed_data: dict):
         file_info = bot.get_file(file_id)
         image_pil = Image.open(BytesIO(bot.download_file(file_info.file_path)))
         image_bytes = BytesIO()
-        image_pil.save(image_bytes, format="JPEG", quality="web_high")
+        image_pil.save(image_bytes, format="PNG")
         image_bytes.seek(0)
         telegram_reply_to(bot, message, image_bytes)
     except:
