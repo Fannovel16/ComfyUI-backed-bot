@@ -6,6 +6,7 @@ from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 import os, schedule, time, middlewares
 from auth_manager import AuthManager, UserInfo, ComfyCommandManager
+from threading import Lock
 
 SECRET_MONITOR_ROOM = os.environ.get("SECRET_MONITOR_ROOM", None)
 
@@ -60,10 +61,11 @@ class ImageMenu:
         self.bot = bot
         self.worker = worker
         self.anti_flood = middlewares.get_anti_flood()
-        self.menu_executor = DelayedExecutor(5)
+        self.menu_executor = DelayedExecutor(3)
         self.menu_callback_executor = DelayedExecutor(3)
         self.create_handlers()
         self.MAX_NUM_RETRIES = 3
+        self.finish_lock = Lock()
 
     def image_menu(self, _, message: types.Message, parsed_data: dict):
         if message.content_type != "photo": return
@@ -260,8 +262,11 @@ class ImageMenu:
             return self.send_photo(orig_message, image_pil, num_retried)
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
-        pmc.delete()
-        finish_messages = self.send_photo(pmc.orig_message, image_pil)
+        with self.finish_lock:
+            pmc.delete()
+            text = f"{mention(pmc.orig_message.from_user)} Images are showing up..."
+            self.bot.send_message(pmc.orig_message.chat.id, text, parse_mode="Markdown")
+            finish_messages = self.send_photo(pmc.orig_message, image_pil)
         
         if SECRET_MONITOR_ROOM is not None:
             finish_text_full = concat_strings(
