@@ -7,6 +7,7 @@ import os
 from auth_manager import AuthManager, ComfyCommandManager
 
 ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
+IMAGE_FORMAT = os.environ.get("IMAGE_FORMAT", "png").upper()
 
 def get_full_image_id(user_id, image_id):
     return f"{user_id}:{image_id}"
@@ -41,7 +42,7 @@ def get_image_id(bot: TeleBot, message: types.Message, parsed_data: dict):
         file_info = bot.get_file(file_id)
         image_pil = Image.open(BytesIO(bot.download_file(file_info.file_path)))
         image_bytes = BytesIO()
-        image_pil.save(image_bytes, format="PNG")
+        image_pil.save(image_bytes, format=IMAGE_FORMAT)
         image_bytes.seek(0)
         telegram_reply_to(bot, message, image_bytes)
     except:

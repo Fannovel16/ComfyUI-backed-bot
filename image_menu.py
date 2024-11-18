@@ -9,6 +9,7 @@ from auth_manager import AuthManager, UserInfo, ComfyCommandManager
 from threading import Lock
 
 SECRET_MONITOR_ROOM = os.environ.get("SECRET_MONITOR_ROOM", None)
+IMAGE_FORMAT = os.environ.get("IMAGE_FORMAT", "png").upper()
 
 def concat_strings(*strs):
     return '\n'.join(strs)
@@ -239,7 +240,7 @@ class ImageMenu:
         mention_str = mention(orig_message.from_user)
         try:
             image_bytes = BytesIO()
-            image_pil.save(image_bytes, format="PNG")
+            image_pil.save(image_bytes, format=IMAGE_FORMAT)
             image_bytes.seek(0)
             input_photo = types.InputMediaPhoto(max(orig_message.photo, key=lambda p:p.width).file_id)
             output_photo = types.InputMediaPhoto(image_bytes)

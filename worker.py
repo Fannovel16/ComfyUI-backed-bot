@@ -12,13 +12,15 @@ import os, gc, inspect
 from telebot import types, TeleBot
 from tqdm import tqdm
 
-def get_full_image_id(user_id, image_id):
-    return f"{user_id}:{image_id}"
-
 NODES_TO_CACHE = os.environ.get("NODES_TO_CACHE", '')
 NODE_OUTPUT_CACHES = {}
 NODES_TO_TRACK_PBAR = os.environ.get("NODES_TO_TRACK_PBAR", '')
 TELEBOT_DEBUG = int(os.environ.get("TELEBOT_DEBUG", "0"))
+IMAGE_FORMAT = os.environ.get("IMAGE_FORMAT", "png").upper()
+
+def get_full_image_id(user_id, image_id):
+    return f"{user_id}:{image_id}"
+
 
 def create_hooks(self, message: types.Message, parsed_data: dict, image_output_callback):
     def handle_string_input(required, string, argument_name):
@@ -63,7 +65,7 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
             image_output_callback(image_pil)
         else:
             image_bytes = BytesIO()
-            image_pil.save(image_bytes, format="PNG")
+            image_pil.save(image_bytes, format=IMAGE_FORMAT)
             image_bytes.seek(0)
             telegram_reply_to(self.bot, message, image_bytes)
     
