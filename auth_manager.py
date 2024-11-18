@@ -87,7 +87,7 @@ class AuthManager:
         allowed_users: dict[str, UserInfo] = cls.allowed_users
         if not allowed_users:
             now = datetime.now()
-            infinite_advanced_info = AdvancedInfo(now, (datetime.max - now).total_seconds()/3600/24)
+            infinite_advanced_info = AdvancedInfo(now, 365*100)
             allowed_users[ADMIN_USER_ID] = UserInfo(ADMIN_USER_ID, "Admin", True, advanced_info=infinite_advanced_info)
 
         for user_id in allowed_users:
