@@ -23,37 +23,41 @@ class AntiFloodMiddleware(BaseMiddleware):
         user_name = get_username(message.from_user)
         user_id = str(message.from_user.id)
         chat_id = str(message.chat.id)
-        is_private_chat = message.chat.type == "private"
-        with AuthManager.allowed_user_dbm() as allowed_users:
-            user_info: UserInfo = allowed_users.get(user_id, None)
-            if user_info is not None and user_info.name == "Name_Unknown":
-                user_info.name = get_username(message.from_user)
-                allowed_users[user_id] = user_info
-            
-            if user_info is not None and not user_info.is_allowed:
-                print(f"User {user_id} is banned! Skipping message")
-                return False
-            
-            if is_private_chat:
-                if user_info is None or user_info.advanced_info is None:
-                    print(f"User {user_name} ({user_id}) is not advanced. Skipping direct message")
-                    return False
-                else:
-                    print(f"User {user_name} ({user_id}) is advanced")
-                    return True
-            
-            if '*' not in self.allowed_chat_ids and chat_id not in self.allowed_chat_ids:
-                print(f"Allowed chatids are: {self.allowed_chat_ids}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message")
-                return False
+        user_str = f"User {user_name} ({user_id})"
+        allowed_users: dict[str, UserInfo] = AuthManager.allowed_users
+        user_info: UserInfo = allowed_users.get(user_id, None)
+        if user_info is not None and user_info.name == "Name_Unknown":
+            user_info.name = get_username(message.from_user)
+            allowed_users[user_id] = user_info
+        if user_info is not None:
+            is_allowed = user_info.is_allowed
+            advanced_info = user_info.advanced_info
+        else:
+            is_allowed = '*' in allowed_users
+            advanced_info = None
 
-            if '*' in allowed_users:
-                if user_id not in allowed_users:
-                    allowed_users[user_id] = UserInfo(user_id, "Name_Unknown")
-                return True
-            if user_id not in allowed_users:
-                print(f"Allowed userids are: {list(allowed_users.keys())}, but got message from user: {user_name} ({user_id}), chatid: {chat_id} ! Skipping message.")
-                return False
+        if not is_allowed:
+            if user_info is None: print(f"{user_str} is not in allowed list")
+            else: print(f"{user_str} is banned. Skipping message")
+            return False
+        
+        if advanced_info is not None:
+            print(f"{user_str} is advanced")
             return True
+                    
+        if '*' not in self.allowed_chat_ids and chat_id not in self.allowed_chat_ids:
+            print(f"Allowed chatids are: {self.allowed_chat_ids}, but got message from {user_str.lower()}, chatid: {chat_id}! Skipping message")
+            return False
+        
+        if user_id not in allowed_users:
+            if '*' in allowed_users:
+                allowed_users[user_id] = UserInfo(user_id, user_name)
+                print(f"Everyone is allowed. Auto create user info for {user_str.lower()}")
+                return True
+            else:
+                print(f"Allowed userids are: {list(allowed_users.keys())}, but got message from {user_str.lower()}, chatid: {chat_id}! Skipping message.")
+                return False
+        return True
     
     def check(self, user_id, message):
         if not user_id in self.last_time:

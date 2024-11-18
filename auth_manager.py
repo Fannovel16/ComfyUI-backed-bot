@@ -1,12 +1,11 @@
 from telebot import types, TeleBot
-from backed_bot_utils import get_username, get_dbm
+from backed_bot_utils import get_username, get_dbm, get_sqldict_db
 import schedule, os
 from datetime import datetime, timedelta
-from dataclasses import dataclass
 from preprocess import analyze_argument_from_preprocessed
+from dataclasses import dataclass, field
 
 ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
-REMAIN_NORMAL_USES = int(os.environ.get("REMAIN_NORMAL_USES", '5'))
 COMMAND_IS_ADVANCED = bool(int(os.environ.get("COMMAND_IS_ADVANCED", '1')))
 
 @dataclass
@@ -14,12 +13,28 @@ class AdvancedInfo:
     start_date: datetime
     duration_days: float
 
+class DefaultNormalUses:
+    default_normal_uses = get_sqldict_db("default_normal_uses")
+
+    @classmethod
+    def warmup(cls):
+        if not cls.default_normal_uses:
+            cls.default_normal_uses["value"] = 5
+    
+    @classmethod
+    def get(cls):
+        return cls.default_normal_uses["value"]
+    
+    @classmethod
+    def set(cls, new_default: int):
+        cls.default_normal_uses["value"] = new_default
+
 @dataclass
 class UserInfo:
     id: str
     name: str
     is_allowed: bool = True
-    remain_normal_uses: int = REMAIN_NORMAL_USES
+    remain_normal_uses: int = field(default_factory=DefaultNormalUses.get)
     advanced_info: AdvancedInfo = None
 
 class AutoRevokeAdvanced:
@@ -27,14 +42,13 @@ class AutoRevokeAdvanced:
     @classmethod
     def create_job(cls, allowed_users: dict[str, UserInfo], user_id: str):
         def job_func(user_id):
-            with AuthManager.allowed_user_dbm() as allowed_users:
-                allowed_users: dict[str, UserInfo]
-                if user_id in allowed_users:
-                    AuthManager.update_user_info(allowed_users, user_id, advanced_info=None)
-                else:
-                    print(f"Advanced user {user_id} is already revoked")
-                del cls.jobs[user_id]
-                return schedule.CancelJob
+            allowed_users: dict[str, UserInfo] = AuthManager.allowed_users
+            if user_id in allowed_users:
+                AuthManager.update_user_info(allowed_users, user_id, advanced_info=None)
+            else:
+                print(f"Advanced user {user_id} is already revoked")
+            del cls.jobs[user_id]
+            return schedule.CancelJob
         
         if user_id not in allowed_users or allowed_users[user_id].advanced_info is None:
             return cls.cancel(user_id)
@@ -53,9 +67,7 @@ class AutoRevokeAdvanced:
             schedule.cancel_job(cls.jobs[user_id])
 
 class AuthManager:
-    @classmethod
-    def allowed_user_dbm(cls):
-        return get_dbm("allowed_users")
+    allowed_users = get_sqldict_db("allowed_users")
 
     @classmethod
     def update_user_info(cls, allowed_users: dict[str, UserInfo], user_id, **kwargs):
@@ -72,16 +84,15 @@ class AuthManager:
     
     @classmethod
     def warmup(cls):
-        with cls.allowed_user_dbm() as allowed_users:
-            allowed_users: dict[str, UserInfo]
-            if not allowed_users:
-                now = datetime.now()
-                infinite_advanced_info = AdvancedInfo(now, (datetime.max - now).days)
-                allowed_users[ADMIN_USER_ID] = UserInfo(ADMIN_USER_ID, "Admin", True, infinite_advanced_info)
+        allowed_users: dict[str, UserInfo] = cls.allowed_users
+        if not allowed_users:
+            now = datetime.now()
+            infinite_advanced_info = AdvancedInfo(now, (datetime.max - now).total_seconds()/3600/24)
+            allowed_users[ADMIN_USER_ID] = UserInfo(ADMIN_USER_ID, "Admin", True, advanced_info=infinite_advanced_info)
 
-            for user_id in allowed_users:
-                AutoRevokeAdvanced.cancel(user_id)
-                AutoRevokeAdvanced.create_job(allowed_users, user_id)
+        for user_id in allowed_users:
+            AutoRevokeAdvanced.cancel(user_id)
+            AutoRevokeAdvanced.create_job(allowed_users, user_id)
     
     @classmethod
     def check_admin(cls, message, do_task):
@@ -91,26 +102,56 @@ class AuthManager:
         return True
     
     @classmethod
-    def serialize_allowed_users(cls, allowed_users: dict[str, UserInfo]):
-        allowed = []
-        for user_id, user_info in allowed_users.items():
-            if not user_info.is_allowed: continue
-            advanced_info = user_info.advanced_info
-            if advanced_info is None:
-                allowed.append(f"• _{user_info.name.replace('_', ' ')}_ (`{user_id}`): Normal\n(`{user_info.remain_normal_uses}` free use(s) left)")
+    def serialize_allowed_users(cls, display=["advanced", "banned"], filer_ids=None):
+        allowed_users: dict[str, UserInfo] = cls.allowed_users
+        normal, advanced, banned = [], [], []
+        normal: list[UserInfo]; advanced: list[UserInfo]; banned: list[UserInfo]
+        for user_info in allowed_users.values():
+            if filer_ids is not None:
+                if user_info.id not in filer_ids: continue
+            if not user_info.is_allowed:
+                banned.append(user_info)
+                continue
+            if user_info.advanced_info is not None:
+                advanced.append(user_info)
             else:
-                date_format = "%d/%m/%y %H:%M"
-                start = advanced_info.start_date.strftime(date_format)
-                end = (advanced_info.start_date + timedelta(days=advanced_info.duration_days)).strftime(date_format)
-                allowed.append(f"• *{user_info.name} (*`{user_id}`*): Advanced*\n(`{start} – {end}`)")
-        allowed_bullet_list = "\n\n".join(allowed)
-        banned_bullet_list = "\n\n".join(
-            f"• _{user_info.name.replace('_', ' ')}_  (`{user_id}`)"
-            for user_id, user_info in allowed_users.items()
-            if not user_info.is_allowed
-        )
-        text = f"Allowed users:\n{allowed_bullet_list}\nBanned users:\n{banned_bullet_list}"
-        return text
+                normal.append(user_info)
+        normal_str = "---------- Normal users ----------\n"
+        normal_str += '\n'.join([
+            f"• _{user_info.name.replace('_', ' ')}_ (`{user_info.id}`): Normal\n(`{user_info.remain_normal_uses}` free use(s) left)"
+            for user_info in normal[:50]
+        ])
+        advanced = sorted(advanced, key=lambda user_info: user_info.advanced_info.duration_days, reverse=True)
+        advanced_str = '---------- Advanced users ----------\n'
+        for user_info in advanced:
+            advanced_info = user_info.advanced_info
+            date_format = "%d/%m/%y %H:%M"
+            start = advanced_info.start_date.strftime(date_format)
+            end = (advanced_info.start_date + timedelta(days=advanced_info.duration_days)).strftime(date_format)
+            advanced_str += f"• *{user_info.name} (*`{user_info.id}`*): Advanced*\n(`{start} – {end}`)\n"
+        advanced_str = advanced_str.strip()
+        banned_str = "---------- Banned users ----------\n"
+        banned_str += '\n'.join([
+            f"• _{user_info.name.replace('_', ' ')}_  (`{user_info.id}`)"
+            for user_info in banned
+        ])
+        output_str = ''
+        if filer_ids is not None:
+            if len(normal):
+                output_str += normal_str + '\n\n'
+            if len(advanced):
+                output_str += advanced_str + '\n\n'
+            if len(banned):
+                output_str += banned_str + '\n\n'
+            if len(output_str): return output_str.strip()
+        for type in display:
+            if type == "normal":
+                output_str += normal_str + '\n\n'
+            elif type == "advanced":
+                output_str += advanced_str + '\n\n'
+            else:
+                output_str += banned_str + '\n\n'
+        return output_str.strip()
     
     @classmethod
     def check_user_id(cls, user_id, allowed_users=None):
@@ -127,49 +168,56 @@ class AuthManager:
     @classmethod
     def get_allowed(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
         if not cls.check_admin(message, "get allowed users"): return
-        with cls.allowed_user_dbm() as allowed_users:
-            allowed_users: dict[str, UserInfo]
-            if allowed_users:
-                bot.reply_to(message, cls.serialize_allowed_users(allowed_users), parse_mode="Markdown")
-            else:
-                bot.reply_to(message, "No user is allowed to use this bot yet")
+        allowed_users: dict[str, UserInfo] = cls.allowed_users
+        if not allowed_users:
+            bot.reply_to(message, "No user is allowed to use this bot yet")
+            return
+        
+        inputs = [inp.strip() for inp in parsed_data["prompt"].split(',') if len(inp.strip())]
+        if "normal" in inputs or "advanced" in inputs or "banned" in inputs:
+            bot.reply_to(message, cls.serialize_allowed_users(inputs), parse_mode="Markdown")
+        elif len(inputs) == 0:
+            bot.reply_to(message, cls.serialize_allowed_users(["advanced", "banned"]), parse_mode="Markdown")
+        else:
+            display = ["normal", "advanced", "banned"]
+            bot.reply_to(message, cls.serialize_allowed_users(display, filer_ids=inputs), parse_mode="Markdown")
 
     @classmethod
     def add_allowed(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
         if not cls.check_admin(message, "add allowed users"): return
-        with cls.allowed_user_dbm() as allowed_users:
-            allowed_users: dict[str, UserInfo]
-            user_id_names = [
-                str(s).split('/') if '/' in s \
-                    else (s, "Everyone" if s.strip() == '*' else "Name_Unknown")
-                for s in parsed_data["prompt"].split(',')
-            ]
-            for user_id, user_name in user_id_names:
-                is_allowed = not user_id.startswith('-')
-                user_id = user_id.strip() if is_allowed else user_id.strip()[1:]
-                if not cls.check_user_id(user_id): continue
-                user_name = user_name.replace('`', '').strip()
-                # Avoid double dbm contexts
-                AutoRevokeAdvanced.cancel(user_id)
-                allowed_users[user_id] = UserInfo(id, user_name, is_allowed)
-                
-            bot.reply_to(message, cls.serialize_allowed_users(allowed_users), parse_mode="Markdown")
+        allowed_users: dict[str, UserInfo] = cls.allowed_users
+        user_id_names = [
+            str(s).split('/') if '/' in s \
+                else (s, "Everyone" if s.strip() == '*' else "Name_Unknown")
+            for s in parsed_data["prompt"].split(',')
+        ]
+        user_ids = []
+        for user_id, user_name in user_id_names:
+            is_allowed = not user_id.startswith('-')
+            user_id = user_id.strip() if is_allowed else user_id.strip()[1:]
+            if not cls.check_user_id(user_id): continue
+            user_name = user_name.replace('`', '').strip()
+            # Avoid double dbm contexts
+            AutoRevokeAdvanced.cancel(user_id)
+            allowed_users[user_id] = UserInfo(user_id, user_name, is_allowed)
+            user_ids.append(user_id)
+            
+        bot.reply_to(message, cls.serialize_allowed_users(filer_ids=user_ids), parse_mode="Markdown")
 
     @classmethod
     def remove_allowed(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
         if not cls.check_admin(message, "remove allowed users"): return
         text = "Removed successfully"
-        with cls.allowed_user_dbm() as allowed_users:
-            allowed_users: dict[str, UserInfo]
-            user_ids = [s.strip() for s in parsed_data["prompt"].strip().split(',')]
-            if "everyone" in user_ids:
-                user_ids = allowed_users.keys()
-            for user_id in user_ids:
-                if not cls.check_user_id(user_id, allowed_users): continue
-                # Avoid double dbm contexts
-                AutoRevokeAdvanced.cancel(user_id)
-                del allowed_users[user_id]
-            text += '\n' + cls.serialize_allowed_users(allowed_users)
+        allowed_users: dict[str, UserInfo] = cls.allowed_users
+        user_ids = [s.strip() for s in parsed_data["prompt"].strip().split(',')]
+        if "everyone" in user_ids:
+            user_ids = allowed_users.keys()
+        for user_id in user_ids:
+            if not cls.check_user_id(user_id, allowed_users): continue
+            # Avoid double dbm contexts
+            AutoRevokeAdvanced.cancel(user_id)
+            del allowed_users[user_id]
+        text += '\n' + cls.serialize_allowed_users(filer_ids=user_ids)
         bot.reply_to(message, text, parse_mode="Markdown")
 
     @classmethod
@@ -181,20 +229,21 @@ class AuthManager:
         ]
         user_id_days = [(id.strip(), float(day)) for id, day in user_id_days]
         text = ''
-        with cls.allowed_user_dbm() as allowed_users:
-            allowed_users: dict[str, UserInfo]
-            for user_id, days in user_id_days:
-                if not cls.check_user_id(user_id): continue
-                if user_id not in allowed_users:
-                    allowed_users[user_id] = UserInfo(user_id, "Unknown_Name", True)
-                if not allowed_users[user_id].is_allowed:
-                    text += f"User `...{user_id[1:][-5:]}` is banned, therefore can't become an advanced user\n"
-                    continue
-                AutoRevokeAdvanced.cancel(user_id)
-                cls.update_user_info(allowed_users, user_id, advanced_info=AdvancedInfo(datetime.now(), days))
-                AutoRevokeAdvanced.create_job(allowed_users, user_id)
-            text += cls.serialize_allowed_users(allowed_users)
-            bot.reply_to(message, text, parse_mode="Markdown")
+        allowed_users: dict[str, UserInfo] = cls.allowed_users
+        user_ids = []
+        for user_id, days in user_id_days:
+            if not cls.check_user_id(user_id): continue
+            if user_id not in allowed_users:
+                allowed_users[user_id] = UserInfo(user_id, "Unknown_Name", True)
+            if not allowed_users[user_id].is_allowed:
+                text += f"User `...{user_id[1:][-5:]}` is banned, therefore can't become an advanced user\n"
+                continue
+            AutoRevokeAdvanced.cancel(user_id)
+            cls.update_user_info(allowed_users, user_id, advanced_info=AdvancedInfo(datetime.now(), days))
+            AutoRevokeAdvanced.create_job(allowed_users, user_id)
+            user_ids.append(user_id)
+        text += cls.serialize_allowed_users(filer_ids=user_ids)
+        bot.reply_to(message, text, parse_mode="Markdown")
 
     @classmethod
     def remove_advanced(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
@@ -203,49 +252,56 @@ class AuthManager:
         # auto_revoke_job has its own dbm context, thus running in cls.allowed_user_dbm() context will cause conflict
         # "pickle data was truncated"
         user_ids = [s.strip() for s in parsed_data["prompt"].strip().split(',')]
-        with cls.allowed_user_dbm() as allowed_users:
-            allowed_users: dict[str, UserInfo]
-            for user_id in user_ids:
-                # Avoid double dbm contexts
-                AutoRevokeAdvanced.cancel(user_id)
-                cls.update_user_info(allowed_users, user_id, advanced_info=None)
-            text += cls.serialize_allowed_users(allowed_users)
+        allowed_users: dict[str, UserInfo] = cls.allowed_users
+        for user_id in user_ids:
+            # Avoid double dbm contexts
+            AutoRevokeAdvanced.cancel(user_id)
+            cls.update_user_info(allowed_users, user_id, advanced_info=None)
+        text += cls.serialize_allowed_users(filer_ids=user_ids)
         bot.reply_to(message, text, parse_mode="Markdown") 
     
     @classmethod
     def set_normal_uses(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
         if not cls.check_admin(message, "set normal uses"): return
-        user_id_uses = [
-            str(s).split('/') if '/' in s else (s, str(REMAIN_NORMAL_USES)) 
-            for s in parsed_data["prompt"].strip().split(',')
-        ]
-        user_id_uses = [(id.strip(), int(uses)) for id, uses in user_id_uses]
-        text = ''
-        with cls.allowed_user_dbm() as allowed_users:
-            allowed_users: dict[str, UserInfo]
-            for user_id, uses in user_id_uses:
-                if user_id not in allowed_users: continue
-                user_info = allowed_users[user_id]
-                text += f"\nUser _{user_info.name.replace('_', ' ')}_ (`..{user_id[-5:]}`) now has `{uses}` normal use(s) left"
-                cls.update_user_info(allowed_users, user_id, remain_normal_uses=uses)
-            text += '\n' + cls.serialize_allowed_users(allowed_users)
-        bot.reply_to(message, text, parse_mode="Markdown") 
+        inputs = parsed_data["prompt"].strip().split(',')
+        if '*' in parsed_data["prompt"]:
+            user_id_use = inputs[0].split('/')
+            if len(user_id_use) == 1:
+                bot.reply_to(message, "Set normal uses for everyone requires explicit number")
+                return
+            _, uses = user_id_use
+            DefaultNormalUses.set(uses)
+            default_normal_uses = DefaultNormalUses.get()
+            allowed_users: dict[str, UserInfo] = cls.allowed_users
+            user_id_uses = [(id.strip(), default_normal_uses) for id in allowed_users]
+        else:
+            default_normal_uses = DefaultNormalUses.get()
+            user_id_uses = [
+                str(s).split('/') if '/' in s else (s, default_normal_uses) 
+                for s in inputs
+            ]
+            user_id_uses = [(id.strip(), int(uses)) for id, uses in user_id_uses]
+        allowed_users: dict[str, UserInfo] = cls.allowed_users
+        user_ids = []
+        for user_id, uses in user_id_uses:
+            if not cls.check_user_id(user_id): continue
+            cls.update_user_info(allowed_users, user_id, remain_normal_uses=uses)
+            user_ids.append(user_id)
+        bot.reply_to(message, cls.serialize_allowed_users(filer_ids=user_ids), parse_mode="Markdown") 
 
 class ComfyCommandManager:
-    @classmethod
-    def command_dbm(cls):
-        return get_dbm("is_advanced_commands")
+    command_manager = get_sqldict_db("command_manager")
     
     @classmethod
     def warmup(cls):
         available_cmds = list(analyze_argument_from_preprocessed().keys())
-        with cls.command_dbm() as commands:
-            for existed_cmd in commands.keys():
-                if existed_cmd not in available_cmds:
-                    del commands[existed_cmd]
-            for available_cmd in available_cmds:
-                if available_cmd not in commands:
-                    commands[available_cmd] = COMMAND_IS_ADVANCED
+        commands: dict[str, bool] = cls.command_manager
+        for existed_cmd in commands.keys():
+            if existed_cmd not in available_cmds:
+                del commands[existed_cmd]
+        for available_cmd in available_cmds:
+            if available_cmd not in commands:
+                commands[available_cmd] = COMMAND_IS_ADVANCED
 
     @classmethod
     def serialize(cls, cmds):
@@ -257,22 +313,22 @@ class ComfyCommandManager:
     @classmethod
     def get_commands(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
         if not AuthManager.check_admin(message, "get commands"): return
-        with cls.command_dbm() as cmds:
-            bot.reply_to(message, cls.serialize(cmds), parse_mode="Markdown")
+        cmds: dict[str, bool] = cls.command_manager
+        bot.reply_to(message, cls.serialize(cmds), parse_mode="Markdown")
     
     @classmethod
     def set_commands(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
         if not AuthManager.check_admin(message, "set commands"): return
         input_cmds = [cmd.strip() for cmd in parsed_data["prompt"].split(',')]
-        print(input_cmds)
-        with cls.command_dbm() as cmds:
-            for input_cmd in input_cmds:
-                is_advanced = not input_cmd.startswith('-')
-                command = input_cmd.strip() if is_advanced else input_cmd.strip()[1:]
-                if command not in cmds: continue
-                cmds[command] = is_advanced
-            bot.reply_to(message, cls.serialize(cmds), parse_mode="Markdown")
+        cmds: dict[str, bool] = cls.command_manager
+        for input_cmd in input_cmds:
+            is_advanced = not input_cmd.startswith('-')
+            command = input_cmd.strip() if is_advanced else input_cmd.strip()[1:]
+            if command not in cmds: continue
+            cmds[command] = is_advanced
+        bot.reply_to(message, cls.serialize(cmds), parse_mode="Markdown")
 
 def warmup():
+    DefaultNormalUses.warmup()
     AuthManager.warmup()
     ComfyCommandManager.warmup()

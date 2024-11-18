@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import logging, unicodedata, threading, schedule, time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
+from sqlitedict import SqliteDict
 
 USERNAME_LENGTH_LIMIT = int(os.environ.get("USERNAME_LENGTH_LIMIT", "17"))
 TIMEZONE_DELTA = float(os.environ.get("TIMEZONE_DELTA", "7"))
@@ -109,6 +110,10 @@ def get_dbm(db_name):
         dbm_dir = Path(__file__).parent / "dbm_data"
         dbm_dir.mkdir(exist_ok=True)
         return shelve.open(str(Path(dbm_dir / db_name).resolve()), 'c')
+
+def get_sqldict_db(db_name):
+    dbm_dir = Path(__file__).parent / "dbm_data" / "auth_manager.sqlite"
+    return SqliteDict(str(dbm_dir.resolve()), db_name, autocommit=True)
 
 def parse_command_string(command_string, command_name):
     textAndArgs = command_string[1+ len(command_name):].strip().split('--')
