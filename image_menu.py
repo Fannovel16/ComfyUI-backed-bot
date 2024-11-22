@@ -143,7 +143,7 @@ class ImageMenu:
                     schedule.every(10).seconds.do(auto_delete)
                     return
                 remain_normal_uses = max(user_info.remain_normal_uses - 1, 0)
-                AuthManager.update_user_info(allowed_users, user_id, remain_normal_uses=remain_normal_uses)
+                AuthManager.update_user_info(user_id, remain_normal_uses=remain_normal_uses)
 
             print(f"@{get_username(call.from_user)} ({call.from_user.id}) called {command}")
             command_input_nodes = analyze_argument_from_preprocessed()

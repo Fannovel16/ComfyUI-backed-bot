@@ -23,11 +23,11 @@ class DefaultNormalUses:
     
     @classmethod
     def get(cls):
-        return cls.default_normal_uses["value"]
+        return int(cls.default_normal_uses["value"])
     
     @classmethod
     def set(cls, new_default: int):
-        cls.default_normal_uses["value"] = new_default
+        cls.default_normal_uses["value"] = int(new_default)
 
 @dataclass
 class UserInfo:
@@ -44,7 +44,7 @@ class AutoRevokeAdvanced:
         def job_func(user_id):
             allowed_users: dict[str, UserInfo] = AuthManager.allowed_users
             if user_id in allowed_users:
-                AuthManager.update_user_info(allowed_users, user_id, advanced_info=None)
+                AuthManager.update_user_info(user_id, advanced_info=None)
             else:
                 print(f"Advanced user {user_id} is already revoked")
             del cls.jobs[user_id]
@@ -56,7 +56,7 @@ class AutoRevokeAdvanced:
         revoke_date = advanced_info.start_date + timedelta(days=advanced_info.duration_days)
         remain_seconds = (revoke_date - datetime.now()).total_seconds()
         if remain_seconds < 0:
-            AuthManager.update_user_info(allowed_users, user_id, advanced_info=None)
+            AuthManager.update_user_info(user_id, advanced_info=None)
             return cls.cancel(user_id)
         cls.jobs[user_id] = schedule.every(remain_seconds).seconds.do(job_func, user_id)
         return cls.jobs[user_id]
@@ -70,8 +70,8 @@ class AuthManager:
     allowed_users = get_sqldict_db("allowed_users")
 
     @classmethod
-    def update_user_info(cls, allowed_users: dict[str, UserInfo], user_id, **kwargs):
-        user_info = allowed_users[user_id]
+    def update_user_info(cls, user_id, **kwargs):
+        user_info = cls.allowed_users[user_id]
         if "name" in kwargs:
             user_info.name = kwargs["name"]
         if "is_allowed" in kwargs:
@@ -80,7 +80,7 @@ class AuthManager:
             user_info.advanced_info = kwargs["advanced_info"]
         if "remain_normal_uses" in kwargs:
             user_info.remain_normal_uses = int(kwargs["remain_normal_uses"])
-        allowed_users[user_id] = user_info
+        cls.allowed_users[user_id] = user_info
     
     @classmethod
     def warmup(cls):
@@ -93,7 +93,7 @@ class AuthManager:
         for user_id in allowed_users:
             AutoRevokeAdvanced.cancel(user_id)
             AutoRevokeAdvanced.create_job(allowed_users, user_id)
-            AuthManager.update_user_info(cls.allowed_users, user_id, remain_normal_uses=int(allowed_users[user_id].remain_normal_uses))
+            AuthManager.update_user_info(user_id, remain_normal_uses=int(allowed_users[user_id].remain_normal_uses))
     
     @classmethod
     def check_admin(cls, message, do_task):
@@ -235,12 +235,12 @@ class AuthManager:
         for user_id, days in user_id_days:
             if not cls.check_user_id(user_id): continue
             if user_id not in allowed_users:
-                allowed_users[user_id] = UserInfo(user_id, "Unknown_Name", True)
+                allowed_users[user_id] = UserInfo(user_id, "Name_Unknown", True)
             if not allowed_users[user_id].is_allowed:
                 text += f"User `...{user_id[1:][-5:]}` is banned, therefore can't become an advanced user\n"
                 continue
             AutoRevokeAdvanced.cancel(user_id)
-            cls.update_user_info(allowed_users, user_id, advanced_info=AdvancedInfo(datetime.now(), days))
+            cls.update_user_info(user_id, advanced_info=AdvancedInfo(datetime.now(), days))
             AutoRevokeAdvanced.create_job(allowed_users, user_id)
             user_ids.append(user_id)
         text += cls.serialize_allowed_users(filer_ids=user_ids)
@@ -257,7 +257,7 @@ class AuthManager:
         for user_id in user_ids:
             # Avoid double dbm contexts
             AutoRevokeAdvanced.cancel(user_id)
-            cls.update_user_info(allowed_users, user_id, advanced_info=None)
+            cls.update_user_info(user_id, advanced_info=None)
         text += cls.serialize_allowed_users(filer_ids=user_ids)
         bot.reply_to(message, text, parse_mode="Markdown") 
     
@@ -286,7 +286,7 @@ class AuthManager:
         user_ids = []
         for user_id, uses in user_id_uses:
             if not cls.check_user_id(user_id): continue
-            cls.update_user_info(allowed_users, user_id, remain_normal_uses=uses)
+            cls.update_user_info(user_id, remain_normal_uses=uses)
             user_ids.append(user_id)
         bot.reply_to(message, cls.serialize_allowed_users(filer_ids=user_ids), parse_mode="Markdown") 
 

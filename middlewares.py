@@ -27,8 +27,8 @@ class AntiFloodMiddleware(BaseMiddleware):
         allowed_users: dict[str, UserInfo] = AuthManager.allowed_users
         user_info: UserInfo = allowed_users.get(user_id, None)
         if user_info is not None and user_info.name == "Name_Unknown":
-            user_info.name = get_username(message.from_user)
-            allowed_users[user_id] = user_info
+            AuthManager.update_user_info(user_id, name=user_name)
+            user_info = allowed_users[user_id]
         if user_info is not None:
             is_allowed = user_info.is_allowed
             advanced_info = user_info.advanced_info
