@@ -3,6 +3,7 @@ import shutil
 import re, ast
 from dataclasses import dataclass
 import yaml
+from PIL import Image
 
 py_workflows_dir = Path(__file__, '..' , 'python_workflows').resolve()
 py_workflows_dir.mkdir(exist_ok=True)
@@ -150,14 +151,51 @@ def analyze_argument_from_preprocessed():
         command_input_nodes[workflow_py.stem.replace("appio_", '')] = get_input_nodes(workflow_py.read_text(encoding="utf-8"))
     return command_input_nodes
 
-def get_command_display_names():
-    commands = list(analyze_argument_from_preprocessed().keys())
-    name_file = Path(py_workflows_dir, "name.yaml")
-    if name_file.exists():
-        return yaml.safe_load(name_file.read_text(encoding="utf-8"))
-    else:
-        return {cmd: cmd for cmd in commands}
+@dataclass
+class GuideCommand:
+    name: str
+    display_name: str
+    text: str
+    pil_images: list[Image.Image]
 
+class CommandConfig:
+    CONFIG_FILE_PATH = Path(py_workflows_dir, "command_config.yaml")
+    CONFIG = (yaml.safe_load(CONFIG_FILE_PATH.read_text(encoding="utf-8"))
+            if CONFIG_FILE_PATH.is_file() 
+            else {"display_names": {}, "no_return_original": []})
+    
+    @classmethod
+    def get_guide_files(cls):
+        return [f for f in py_workflows_dir.iterdir() if f.suffix == '.txt']
+
+    @classmethod
+    def get_display_names(cls):
+        commands = list(analyze_argument_from_preprocessed().keys())
+        guides = [f.stem for f in cls.get_guide_files()]
+        cmd_names, guide_names = {}, {}
+        for command in commands:
+            cmd_names[command] = cls.CONFIG["display_names"].get(command, command)
+        for guide in guides:
+            guide_names[guide] = cls.CONFIG["display_names"].get(guide, guide)
+        return cmd_names, guide_names
+
+    @classmethod
+    def get_no_return_original(cls):
+        return cls.CONFIG["no_return_original"]
+    
+    @classmethod
+    def get_guides(cls):
+        guide_files = cls.get_guide_files()
+        guides: dict[str, GuideCommand] = {}
+        file_exts = ['jpg', 'png', 'jpeg', 'webp']
+        _, display_names = cls.get_display_names()
+        for guide_file in guide_files:
+            guide = guide_file.stem
+            image_files = [f for ext in file_exts for f in py_workflows_dir.glob(guide + f"*.{ext}")]
+            pil_images = [Image.open(image_file) for image_file in image_files]
+            guides[guide] = GuideCommand(guide, display_names[guide], guide_file.read_text(encoding="utf-8"), pil_images)
+        return guides
+        
 def serialize_input_nodes(command: str, id: str, prompt: str, input_nodes: list[InputNode]):
     argument_types = {
         "AppIO_StringInput": "String", 

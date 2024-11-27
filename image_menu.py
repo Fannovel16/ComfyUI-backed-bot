@@ -1,5 +1,5 @@
 from telebot import types, TeleBot
-from preprocess import analyze_argument_from_preprocessed, serialize_input_nodes, deserialize_input_chain_message, get_command_display_names
+from preprocess import analyze_argument_from_preprocessed, serialize_input_nodes, deserialize_input_chain_message, CommandConfig
 from dataclasses import dataclass
 from backed_bot_utils import mention, get_username
 from io import BytesIO
@@ -10,6 +10,7 @@ from threading import Lock
 
 SECRET_MONITOR_ROOM = os.environ.get("SECRET_MONITOR_ROOM", None)
 IMAGE_FORMAT = os.environ.get("IMAGE_FORMAT", "png").upper()
+TRIAL_IMAGE_FORMAT = os.environ.get("TRIAL_IMAGE_FORMAT", "jpeg").upper()
 
 def concat_strings(*strs):
     return '\n'.join(strs)
@@ -56,6 +57,8 @@ class PhotoMessageChain:
     
 INPUT_CHAIN_MESSAGE_PREFIX = "INPUT CHAIN"
 PHOTO_MESSAGE_CHAINS: dict[str, PhotoMessageChain] = {} # circumvent 64-character limit of callback_data
+Markup = types.InlineKeyboardMarkup
+Button = types.InlineKeyboardButton
 
 class ImageMenu:
     def __init__(self, bot: TeleBot, worker):
@@ -75,7 +78,8 @@ class ImageMenu:
             if type(signal) == middlewares.CancelUpdate: return
         print(f"Sending image menu to @{get_username(message.from_user)} ({message.from_user.id})")
 
-        cmd_display_names = get_command_display_names()
+        cmd_display_names, _ = CommandConfig.get_display_names()
+        guide_cmds = CommandConfig.get_guides()
         user_id = str(message.from_user.id)
         id = str(message.id)
         pmc = PhotoMessageChain(id, self.bot, message, [message])
@@ -85,14 +89,22 @@ class ImageMenu:
             is_user_advanced = allowed_users[user_id].advanced_info is not None
         else:
             is_user_advanced = False
-        markup = types.InlineKeyboardMarkup()
+        markup = Markup()
         cmds_advanced: dict[str, bool] = ComfyCommandManager.command_manager
-        btns = [types.InlineKeyboardButton(
+        btns = [Button(
                 (('' if is_user_advanced else '🔒') if cmds_advanced[cmd] else '') + display_name, 
                 callback_data=f"{cmd}|{id}") 
             for cmd, display_name in cmd_display_names.items()]
         markup.add(*btns, row_width=2)
-        markup.add(types.InlineKeyboardButton("close", callback_data=f"close|{id}"), row_width=1)
+        if guide_cmds:
+            markup.add(*[Button(
+                cmd.display_name,
+                callback_data=f"guide|{id}|{cmd.name}"
+            ) for cmd in guide_cmds.values()], row_width=2)
+        markup.add(
+            Button(cmd_display_names.get("get_user_info", "Get User Info"), callback_data=f"get_user_info|{id}"),
+            Button("close", callback_data=f"close|{id}"),
+            row_width=1)
         reply_text = concat_strings(
             mention(message.from_user),
             f"IMAGE MENU (auto deleted after 30s) - Prompt: `{pmc.prompt}`",
@@ -113,11 +125,29 @@ class ImageMenu:
         force_reply = types.ForceReply(selective=False)
         @self.bot.callback_query_handler(func=lambda call: True)
         def callback_query(call: types.CallbackQuery):
-            command, id = call.data.split('|')
+            command, id, *args = call.data.split('|')
             pmc = PHOTO_MESSAGE_CHAINS.get(id)
+            user_id = str(pmc.orig_message.from_user.id)
+            chat_id = pmc.orig_message.chat.id
             if pmc is None or (call.from_user.id != pmc.orig_message.from_user.id):
                 return
             if command == "close":
+                pmc.auto_close_job.run()
+                return
+            if command == "get_user_info":
+                text = AuthManager.serialize_allowed_users(["normal", "advanced", "banned"], filer_ids=[user_id])
+                self.bot.send_message(chat_id, text, parse_mode="Markdown")
+                pmc.auto_close_job.run()
+                return
+            if command == "guide":
+                guide = CommandConfig.get_guides()[args[0]]
+                text_message = self.bot.send_message(chat_id, mention(pmc.orig_message.from_user) + '\n' + guide.text, parse_mode="Markdown")
+                if guide.pil_images:
+                    self.bot.send_media_group(
+                        chat_id,
+                        [types.InputMediaPhoto(pil_image) for pil_image in guide.pil_images],
+                        reply_to_message_id=text_message.id
+                    )
                 pmc.auto_close_job.run()
                 return
             if pmc.orig_message.chat.type != "private":
@@ -126,7 +156,6 @@ class ImageMenu:
             
             allowed_users: dict[str, UserInfo] = AuthManager.allowed_users
             cmds_advanced: dict[str, bool] = ComfyCommandManager.command_manager
-            user_id = str(pmc.orig_message.from_user.id)
             user_info = allowed_users[user_id]
             if user_info.advanced_info is None:
                 notify_message = None
@@ -169,11 +198,12 @@ class ImageMenu:
                     lambda: self.bot.send_message(pmc.orig_message.chat.id, f"{mention_str} Executing...", parse_mode="Markdown")
                 )
                 pmc.append(pbar_message)
+                return_original = not form["command"] in CommandConfig.get_no_return_original()
                 self.worker.execute(
                     form["command"],
                     pmc.orig_message, form,
                     pbar_message=pbar_message if pbar_message.chat.type == "private" else None, 
-                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
+                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil, return_original=return_original)
                 )
 
 
@@ -227,15 +257,16 @@ class ImageMenu:
                 pmc.delete()
                 pbar_message = self.bot.send_message(pmc.orig_message.chat.id, reply_text, parse_mode="Markdown")
                 pmc.append(pbar_message)
+                return_original = not form["command"] in CommandConfig.get_no_return_original()
                 self.worker.execute(
                     form["command"], 
                     pmc.orig_message, 
                     form,
                     pbar_message=pbar_message if pbar_message.chat.type == "private" else None,
-                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil)
+                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil, return_original=return_original)
                 )
     
-    def send_photo(self, orig_message, image_pil, num_retried=0):
+    def send_photo(self, orig_message, image_pil, image_format="PNG", return_original=True, num_retried=0):
         print(f"Sending output to @{get_username(orig_message.from_user)} ({orig_message.from_user.id})")
         mention_str = mention(orig_message.from_user)
         try:
@@ -247,7 +278,7 @@ class ImageMenu:
             
             return self.bot.send_media_group(
                 orig_message.chat.id,
-                [input_photo, output_photo]
+                [input_photo, output_photo] if return_original else [output_photo]
             )
         
         except Exception as e:
@@ -260,14 +291,15 @@ class ImageMenu:
                     parse_mode="Markdown"
                 )
                 raise e
-            return self.send_photo(orig_message, image_pil, num_retried)
+            return self.send_photo(orig_message, image_pil, image_format, num_retried)
 
-    def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil):
+    def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil, return_original=True):
         with self.finish_lock:
             pmc.delete()
             text = f"{mention(pmc.orig_message.from_user)} Images are showing up..."
             self.bot.send_message(pmc.orig_message.chat.id, text, parse_mode="Markdown")
-            finish_messages = self.send_photo(pmc.orig_message, image_pil)
+            user_info: UserInfo = AuthManager.allowed_users[str(pmc.orig_message.from_user.id)]
+            finish_messages = self.send_photo(pmc.orig_message, image_pil, image_format=IMAGE_FORMAT if user_info.advanced_info else TRIAL_IMAGE_FORMAT, return_original=return_original)
         
         if SECRET_MONITOR_ROOM is not None:
             finish_text_full = concat_strings(

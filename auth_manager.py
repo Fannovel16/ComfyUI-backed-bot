@@ -103,7 +103,9 @@ class AuthManager:
         return True
     
     @classmethod
-    def serialize_allowed_users(cls, display=["advanced", "banned"], filer_ids=None):
+    def serialize_allowed_users(cls, display=["advanced", "banned"], filer_ids=None, display_user_id=True):
+        def uid_bracket(user_info: UserInfo):
+            return f"(`{user_info.id}`)" if display_user_id else ''
         allowed_users: dict[str, UserInfo] = cls.allowed_users
         normal, advanced, banned = [], [], []
         normal: list[UserInfo]; advanced: list[UserInfo]; banned: list[UserInfo]
@@ -119,7 +121,7 @@ class AuthManager:
                 normal.append(user_info)
         normal_str = "---------- Normal users ----------\n"
         normal_str += '\n'.join([
-            f"• _{user_info.name.replace('_', ' ')}_ (`{user_info.id}`): Normal\n(`{user_info.remain_normal_uses}` free use(s) left)"
+            f"• _{user_info.name.replace('_', ' ')}_ {uid_bracket(user_info)}: Normal\n(`{user_info.remain_normal_uses}` free use(s) left)"
             for user_info in normal[:50]
         ])
         advanced = sorted(advanced, key=lambda user_info: user_info.advanced_info.duration_days, reverse=True)
@@ -127,13 +129,13 @@ class AuthManager:
         for user_info in advanced:
             advanced_info = user_info.advanced_info
             date_format = "%d/%m/%y %H:%M"
-            start = advanced_info.start_date.strftime(date_format)
-            end = (advanced_info.start_date + timedelta(days=advanced_info.duration_days)).strftime(date_format)
-            advanced_str += f"• *{user_info.name} (*`{user_info.id}`*): Advanced*\n(`{start} – {end}`)\n"
+            start = advanced_info.start_date
+            end = advanced_info.start_date + timedelta(days=advanced_info.duration_days)
+            advanced_str += f"• *{user_info.name} *{uid_bracket(user_info)}*: Advanced {(end-start).days} day(s) left*\n(`{start.strftime(date_format)} – {end.strftime(date_format)}`)\n"
         advanced_str = advanced_str.strip()
         banned_str = "---------- Banned users ----------\n"
         banned_str += '\n'.join([
-            f"• _{user_info.name.replace('_', ' ')}_  (`{user_info.id}`)"
+            f"• _{user_info.name.replace('_', ' ')}_  {uid_bracket(user_info)}"
             for user_info in banned
         ])
         output_str = ''
@@ -145,6 +147,7 @@ class AuthManager:
             if len(banned):
                 output_str += banned_str + '\n\n'
             if len(output_str): return output_str.strip()
+            else: return "User not found"
         for type in display:
             if type == "normal":
                 output_str += normal_str + '\n\n'
