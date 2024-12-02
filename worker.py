@@ -181,7 +181,7 @@ class ComfyWorker:
         self.execute_lock = threading.Lock()
         self.executing_user_id = None
 
-    def execute(self, command_name, message: types.Message, parsed_data, pbar_message: types.Message=None, image_output_callback=None):
+    def execute(self, command_name, message: types.Message, parsed_data, pbar_message: types.Message=None, show_pbar=False, image_output_callback=None):
         with self.execute_lock:
             user_id = str(message.from_user.id)
             user_ids_in_queue = set([str(req.orig_message.from_user.id) for req in self.request_queue])
@@ -194,7 +194,7 @@ class ComfyWorker:
             
             self.request_queue.append(Request(
                 self.bot, len(self.request_queue), len(self.request_queue)+1, message, pbar_message, 
-                (pbar_message, command_name, message, parsed_data, image_output_callback)
+                (show_pbar, pbar_message, command_name, message, parsed_data, image_output_callback)
             ))
     
     def get_request(self):
@@ -233,10 +233,10 @@ class ComfyWorker:
         print("Telegram bot running, listening for all commands")
         while True:
             if not self.request_queue: continue
-            pbar_message, command_name, orig_message, parsed_data, image_output_callback = self.get_request()
+            show_pbar, pbar_message, command_name, orig_message, parsed_data, image_output_callback = self.get_request()
             parsed_data["prompt"] = parsed_data["prompt"].replace("''", '')
             hooks = create_hooks(self, orig_message, parsed_data, image_output_callback)
-            if pbar_message is not None:
+            if show_pbar:
                 set_progress_bar_global_hook(lambda *args: self.message_pbar_hook(pbar_message, *args))
             try:
                 getattr(preprocessed, command_name)(self.NODE_CLASS_MAPPINGS, hooks)

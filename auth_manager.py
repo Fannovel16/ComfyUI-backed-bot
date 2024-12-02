@@ -95,6 +95,8 @@ class AuthManager:
             AutoRevokeAdvanced.cancel(user_id)
             AutoRevokeAdvanced.create_job(allowed_users, user_id)
             AuthManager.update_user_info(user_id, remain_normal_uses=int(allowed_users[user_id].remain_normal_uses))
+            if allowed_users[user_id].name == "Unknown_Name":
+                AuthManager.update_user_info(user_id, name="Name_Unknown")
     
     @classmethod
     def check_admin(cls, message, do_task):
@@ -297,12 +299,11 @@ class AuthManager:
             user_info for user_info in cls.allowed_users.values()
             if user_info.advanced_info is not None
         ]
-        for i in range(0, len(advanced_users), 5):
-            _advanced_users = advanced_users[i:i+5]
-            mention_str = ' '.join([f"[@{user_info.name}](tg://user?id={user_info.id})" for user_info in _advanced_users])
-            bot.send_message(message.chat.id, f"{mention_str} {text}", "Markdown")
-            sleep(3)
-            
+        for advanced_user in advanced_users:
+            try: bot.send_message(advanced_user.id, text)
+            except Exception as e:
+                print(f"Can't send notification to advanced user {advanced_user.name} ({advanced_user.id}): {e}")
+            sleep(1)
 
 class ComfyCommandManager:
     command_manager = get_sqldict_db("command_manager")

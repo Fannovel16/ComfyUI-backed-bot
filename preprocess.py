@@ -170,12 +170,13 @@ class CommandConfig:
 
     @classmethod
     def get_display_names(cls):
-        commands = list(analyze_argument_from_preprocessed().keys())
         guides = [f.stem for f in cls.get_guide_files()]
         cmd_names, guide_names = {}, {}
-        for command in commands:
+        for command in cls.CONFIG["display_names"]:
+            if command in guides: continue
             cmd_names[command] = cls.CONFIG["display_names"].get(command, command)
-        for guide in guides:
+        for guide in cls.CONFIG["display_names"]:
+            if command not in guides: continue
             guide_names[guide] = cls.CONFIG["display_names"].get(guide, guide)
         return cmd_names, guide_names
 

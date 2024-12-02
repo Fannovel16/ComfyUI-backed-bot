@@ -202,7 +202,8 @@ class ImageMenu:
                 self.worker.execute(
                     form["command"],
                     pmc.orig_message, form,
-                    pbar_message=pbar_message if pbar_message.chat.type == "private" else None, 
+                    pbar_message=pbar_message, 
+                    show_pbar=pbar_message.chat.type == "private",
                     image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil, return_original=return_original)
                 )
 
@@ -262,7 +263,8 @@ class ImageMenu:
                     form["command"], 
                     pmc.orig_message, 
                     form,
-                    pbar_message=pbar_message if pbar_message.chat.type == "private" else None,
+                    pbar_message=pbar_message,
+                    show_pbar=pbar_message.chat.type == "private",
                     image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil, return_original=return_original)
                 )
     
