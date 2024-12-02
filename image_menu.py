@@ -92,7 +92,7 @@ class ImageMenu:
         markup = Markup()
         cmds_advanced: dict[str, bool] = ComfyCommandManager.command_manager
         btns = [Button(
-                (('' if is_user_advanced else '🔒') if cmds_advanced[cmd] else '') + display_name, 
+                (('' if is_user_advanced else '🔒') if cmds_advanced.get(cmd, False) else '') + display_name, 
                 callback_data=f"{cmd}|{id}") 
             for cmd, display_name in cmd_display_names.items()]
         markup.add(*btns, row_width=2)
