@@ -195,7 +195,7 @@ class ImageMenu:
                 pmc.delete()
                 pbar_message = self.menu_callback_executor(
                     pmc.orig_message.chat,
-                    lambda: self.bot.send_message(pmc.orig_message.chat.id, f"{mention_str} Executing...", parse_mode="Markdown")
+                    lambda: self.bot.send_message(pmc.orig_message.chat.id, f"{mention_str} Queuing...", parse_mode="Markdown")
                 )
                 pmc.append(pbar_message)
                 return_original = not form["command"] in CommandConfig.get_no_return_original()
@@ -207,7 +207,7 @@ class ImageMenu:
                 )
 
 
-        @self.bot.message_handler(func=lambda message: message.reply_to_message is not None, content_types=["text", "photo"])
+        @self.bot.message_handler(func=lambda message: message.reply_to_message is not None and not (message.text or '').startswith("/get_ids"), content_types=["text", "photo"])
         def input_chain(message: types.Message):
             orig_messsage = message.reply_to_message
             text = orig_messsage.text or ''
@@ -252,7 +252,7 @@ class ImageMenu:
                     title_pad(),
                     serialized_form.replace('`', ''),
                     sep(),
-                    "Executing..."
+                    "Queuing..."
                 )
                 pmc.delete()
                 pbar_message = self.bot.send_message(pmc.orig_message.chat.id, reply_text, parse_mode="Markdown")
@@ -295,11 +295,20 @@ class ImageMenu:
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil, return_original=True):
         with self.finish_lock:
-            pmc.delete()
-            text = f"{mention(pmc.orig_message.from_user)} Images are showing up..."
-            self.bot.send_message(pmc.orig_message.chat.id, text, parse_mode="Markdown")
+            pmc.append(
+                self.bot.send_message(
+                    pmc.orig_message.chat.id, 
+                    f"{mention(pmc.orig_message.from_user)} Images are showing up...", parse_mode="Markdown"
+                )
+            )
             user_info: UserInfo = AuthManager.allowed_users[str(pmc.orig_message.from_user.id)]
-            finish_messages = self.send_photo(pmc.orig_message, image_pil, image_format=IMAGE_FORMAT if user_info.advanced_info else TRIAL_IMAGE_FORMAT, return_original=return_original)
+            image_format = IMAGE_FORMAT if user_info.advanced_info else TRIAL_IMAGE_FORMAT
+            try:
+                finish_messages = self.send_photo(pmc.orig_message, image_pil, image_format=image_format, return_original=return_original)
+            except Exception as e:
+                raise e
+            finally:
+                pmc.delete()
         
         if SECRET_MONITOR_ROOM is not None:
             finish_text_full = concat_strings(

@@ -7,10 +7,11 @@ import numpy as np
 from io import BytesIO, StringIO
 from collections import deque
 import threading
-from backed_bot_utils import telegram_reply_to, get_username, handle_exception, get_dbm, all_logging_disabled
+from backed_bot_utils import telegram_reply_to, get_username, handle_exception, get_dbm, all_logging_disabled, mention
 import os, gc, inspect
 from telebot import types, TeleBot
 from tqdm import tqdm
+import schedule
 
 NODES_TO_CACHE = os.environ.get("NODES_TO_CACHE", '')
 NODE_OUTPUT_CACHES = {}
@@ -139,16 +140,70 @@ class NodeProgressBar:
         except:
             pass
 
+class Request:
+    def __init__(self, bot: TeleBot, index: int, queue_len: int, orig_message: types.Message, message: types.Message, data):
+        self.bot = bot
+        self.index = index
+        self.queue_len = queue_len
+        self.message = message
+        self.data = data
+        self.orig_message = orig_message
+        self.update_queue_job = schedule.every(2.5).seconds.do(self.update_queue)
+        self.update_queue_job.run()
+    
+    def update_queue(self):
+        if self.message is not None:
+            user = self.orig_message.from_user
+            text = f"{mention(user)} Queuing: `{self.queue_len - self.index}` people ahead ({self.index+1}/{self.queue_len})..."
+            rendered_text = f"@{get_username(user)} Queuing: {self.queue_len - self.index} people ahead ({self.index+1}/{self.queue_len})..."
+            if self.message.text != rendered_text:
+                self.message = self.bot.edit_message_text(
+                    text,
+                    self.message.chat.id, self.message.id, parse_mode="Markdown"
+                )
+    
+    def pop(self):
+        schedule.cancel_job(self.update_queue_job)
+        if self.message is not None:
+            self.message = self.bot.edit_message_text(
+                f"Executing...",
+                self.message.chat.id, self.message.id, parse_mode="Markdown"
+            )
+        return self.data
+
 class ComfyWorker:
     def __init__(self, bot: TeleBot):
-        self.data = deque()
+        self.request_queue: deque[Request] = deque()
         self.bot = bot
         self.node_pbar = None
         self.NODE_CLASS_MAPPINGS = {}
         threading.Thread(target=self.loop_thread, daemon=True).start()
+        self.execute_lock = threading.Lock()
+        self.executing_user_id = None
+
+    def execute(self, command_name, message: types.Message, parsed_data, pbar_message: types.Message=None, image_output_callback=None):
+        with self.execute_lock:
+            user_id = str(message.from_user.id)
+            user_ids_in_queue = set([str(req.orig_message.from_user.id) for req in self.request_queue])
+            if user_id in user_ids_in_queue or user_id == self.executing_user_id:
+                if pbar_message is not None:
+                    return self.bot.edit_message_text(
+                        f"{mention(message.from_user)} Multiple simultaneous requests are not allowed", 
+                        pbar_message.chat.id, pbar_message.id, parse_mode="Markdown"
+                    )
+            
+            self.request_queue.append(Request(
+                self.bot, len(self.request_queue), len(self.request_queue)+1, message, pbar_message, 
+                (pbar_message, command_name, message, parsed_data, image_output_callback)
+            ))
     
-    def execute(self, command_name, message, parsed_data, pbar_message=None, image_output_callback=None):
-        self.data.append((command_name, message, parsed_data, pbar_message, image_output_callback))
+    def get_request(self):
+        curr_req = self.request_queue.popleft()
+        self.executing_user_id = str(curr_req.orig_message.from_user.id)
+        for idx, req in enumerate(self.request_queue):
+            req.index = idx
+            req.queue_len = len(self.request_queue)
+        return curr_req.pop()
     
     def message_pbar_hook(self, message, current, total, preview):
         stack = inspect.stack()
@@ -177,10 +232,10 @@ class ComfyWorker:
             
         print("Telegram bot running, listening for all commands")
         while True:
-            if not self.data: continue
-            command_name, message, parsed_data, pbar_message, image_output_callback = self.data.popleft()
+            if not self.request_queue: continue
+            pbar_message, command_name, orig_message, parsed_data, image_output_callback = self.get_request()
             parsed_data["prompt"] = parsed_data["prompt"].replace("''", '')
-            hooks = create_hooks(self, message, parsed_data, image_output_callback)
+            hooks = create_hooks(self, orig_message, parsed_data, image_output_callback)
             if pbar_message is not None:
                 set_progress_bar_global_hook(lambda *args: self.message_pbar_hook(pbar_message, *args))
             try:
@@ -188,7 +243,8 @@ class ComfyWorker:
                 mm.cleanup_models(keep_clone_weights_loaded=True)
                 gc.collect()
                 mm.soft_empty_cache()
-            except Exception as e:
-                handle_exception(self.bot, message)
+            except Exception:
+                handle_exception(self.bot, orig_message)
             finally:
                 set_progress_bar_global_hook(None)
+                self.executing_user_id = None

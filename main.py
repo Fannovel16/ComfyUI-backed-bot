@@ -23,6 +23,7 @@ COMMANDS.extend(SPECIAL_COMMANDS.keys())
 COMMANDS.extend(["image_menu"])
 FREE_COMMANDS = ["get_ids"]
 warmup()
+ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
 
 if int(os.environ.get("TELEBOT_DEBUG", "0")):
     logger.setLevel(logging.DEBUG)
@@ -46,9 +47,12 @@ worker = ComfyWorker(bot)
 image_menu = ImageMenu(bot, worker)
 SPECIAL_COMMANDS["image_menu"] = image_menu.image_menu
 
-@bot.message_handler(["get_ids"])
+@bot.message_handler(["get_ids"], content_types=["text"])
 def get_ids(message: types.Message):
-    _message = message.reply_to_message or message
+    if message.reply_to_message is not None and str(message.from_user.id) == ADMIN_USER_ID:
+        _message = message.reply_to_message
+    else:
+        _message = message
     bot.reply_to(message, f"Chat ID: {_message.chat.id}, User ID: {_message.from_user.id}")
 
 @bot.message_handler(func=lambda message: message.reply_to_message is None, content_types=["text", "photo"])

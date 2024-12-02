@@ -159,7 +159,7 @@ class GuideCommand:
     pil_images: list[Image.Image]
 
 class CommandConfig:
-    CONFIG_FILE_PATH = Path(py_workflows_dir, "command_config.yaml")
+    CONFIG_FILE_PATH = Path(py_workflows_dir, "config.yaml")
     CONFIG = (yaml.safe_load(CONFIG_FILE_PATH.read_text(encoding="utf-8"))
             if CONFIG_FILE_PATH.is_file() 
             else {"display_names": {}, "no_return_original": []})

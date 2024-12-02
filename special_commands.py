@@ -56,6 +56,7 @@ SPECIAL_COMMANDS = {
     "remove_allowed": AuthManager.remove_allowed,
     "add_advanced": AuthManager.add_advanced,
     "remove_advanced": AuthManager.remove_advanced,
+    "notify_advanced": AuthManager.notify_advanced,
     "set_normal_uses": AuthManager.set_normal_uses,
     "get_commands": ComfyCommandManager.get_commands,
     "set_commands": ComfyCommandManager.set_commands

@@ -1,9 +1,10 @@
 from telebot import types, TeleBot
-from backed_bot_utils import get_username, get_dbm, get_sqldict_db
+from backed_bot_utils import get_username, get_sqldict_db
 import schedule, os
 from datetime import datetime, timedelta
 from preprocess import analyze_argument_from_preprocessed
 from dataclasses import dataclass, field
+from time import sleep
 
 ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
 COMMAND_IS_ADVANCED = bool(int(os.environ.get("COMMAND_IS_ADVANCED", '1')))
@@ -201,7 +202,6 @@ class AuthManager:
             user_id = user_id.strip() if is_allowed else user_id.strip()[1:]
             if not cls.check_user_id(user_id): continue
             user_name = user_name.replace('`', '').strip()
-            # Avoid double dbm contexts
             AutoRevokeAdvanced.cancel(user_id)
             allowed_users[user_id] = UserInfo(user_id, user_name, is_allowed)
             user_ids.append(user_id)
@@ -218,7 +218,6 @@ class AuthManager:
             user_ids = allowed_users.keys()
         for user_id in user_ids:
             if not cls.check_user_id(user_id, allowed_users): continue
-            # Avoid double dbm contexts
             AutoRevokeAdvanced.cancel(user_id)
             del allowed_users[user_id]
         text += '\n' + cls.serialize_allowed_users(filer_ids=user_ids)
@@ -253,12 +252,8 @@ class AuthManager:
     def remove_advanced(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
         if not cls.check_admin(message, "remove advanced users"): return
         text = "Removed successfully\n"
-        # auto_revoke_job has its own dbm context, thus running in cls.allowed_user_dbm() context will cause conflict
-        # "pickle data was truncated"
         user_ids = [s.strip() for s in parsed_data["prompt"].strip().split(',')]
-        allowed_users: dict[str, UserInfo] = cls.allowed_users
         for user_id in user_ids:
-            # Avoid double dbm contexts
             AutoRevokeAdvanced.cancel(user_id)
             cls.update_user_info(user_id, advanced_info=None)
         text += cls.serialize_allowed_users(filer_ids=user_ids)
@@ -292,6 +287,22 @@ class AuthManager:
             cls.update_user_info(user_id, remain_normal_uses=uses)
             user_ids.append(user_id)
         bot.reply_to(message, cls.serialize_allowed_users(filer_ids=user_ids), parse_mode="Markdown") 
+    
+    @classmethod
+    def notify_advanced(cls, bot: TeleBot, message: types.Message, parsed_data: dict):
+        if not cls.check_admin(message, "notify advanced users"): return
+        text = parsed_data["prompt"]
+        if len(text.strip()) == 0: return
+        advanced_users: list[UserInfo] = [
+            user_info for user_info in cls.allowed_users.values()
+            if user_info.advanced_info is not None
+        ]
+        for i in range(0, len(advanced_users), 5):
+            _advanced_users = advanced_users[i:i+5]
+            mention_str = ' '.join([f"[@{user_info.name}](tg://user?id={user_info.id})" for user_info in _advanced_users])
+            bot.send_message(message.chat.id, f"{mention_str} {text}", "Markdown")
+            sleep(3)
+            
 
 class ComfyCommandManager:
     command_manager = get_sqldict_db("command_manager")
