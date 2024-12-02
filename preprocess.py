@@ -96,7 +96,8 @@ def preprocess(hooks):
         code = code.replace("def main():", f"def main(NODE_CLASS_MAPPINGS, hooks):") \
                     .replace("    import_custom_nodes()", '')
         for hooker in hooks:
-            code = re.sub(rf"NODE_CLASS_MAPPINGS\[\s*\"{hooker}\"\s*\]\(\)", f'hooks["{hooker}"]', code)
+            _hooker = hooker.replace('(', '\(').replace(')', '\)')
+            code = re.sub(rf"NODE_CLASS_MAPPINGS\[\s*\"{_hooker}\"\s*\]\(\)", f'hooks["{hooker}"]', code)
         temp_file = preprocessed_dir / f"appio_{workflow_py.name}"
         temp_file.write_text(code)
         commands.append(workflow_py.stem)
@@ -173,10 +174,10 @@ class CommandConfig:
         guides = [f.stem for f in cls.get_guide_files()]
         cmd_names, guide_names = {}, {}
         for command in cls.CONFIG["display_names"]:
-            if command in guides: continue
+            if command in guides or command == "get_user_info": continue
             cmd_names[command] = cls.CONFIG["display_names"].get(command, command)
         for guide in cls.CONFIG["display_names"]:
-            if command not in guides: continue
+            if command not in guides or command == "get_user_info": continue
             guide_names[guide] = cls.CONFIG["display_names"].get(guide, guide)
         return cmd_names, guide_names
 
