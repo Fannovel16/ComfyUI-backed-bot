@@ -22,7 +22,6 @@ IMAGE_FORMAT = os.environ.get("IMAGE_FORMAT", "png").upper()
 def get_full_image_id(user_id, image_id):
     return f"{user_id}:{image_id}"
 
-
 def create_hooks(self, message: types.Message, parsed_data: dict, image_output_callback):
     def handle_string_input(required, string, argument_name):
         if required and argument_name not in parsed_data:
@@ -86,6 +85,22 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
         return (integer,)
     
     def handle_nodes_to_cache():
+        class NodeProxy:
+            def __init__(self, node, class_name):
+                self.node = node
+                self.class_name = class_name
+            
+            def __call__(self, **kwargs):
+                key = f"{self.class_name}({kwargs})"
+                if key not in NODE_OUTPUT_CACHES:
+                    print(f"Caching node {key}...")
+                    NODE_OUTPUT_CACHES[key] = getattr(self.node, self.node.FUNCTION)(**kwargs)
+                return NODE_OUTPUT_CACHES[key]
+
+            @property
+            def hooker(self):
+                return SimpleNamespace(**{self.node.FUNCTION: self})
+        
         hooks = {}
         not_installed_nodes = []
         for node_to_cache in map(lambda str: str.strip(), NODES_TO_CACHE.split(',')):
@@ -93,13 +108,7 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
                 not_installed_nodes.append(node_to_cache)
                 continue
             node = self.NODE_CLASS_MAPPINGS[node_to_cache]()
-            def cache_proxy(**kwargs):
-                key = f"{node_to_cache}({kwargs})"
-                if key not in NODE_OUTPUT_CACHES:
-                    print(f"Caching node {key}...")
-                    NODE_OUTPUT_CACHES[key] = getattr(node, node.FUNCTION)(**kwargs)
-                return NODE_OUTPUT_CACHES[key]
-            hooks[node_to_cache] = SimpleNamespace(**{node.FUNCTION: cache_proxy})
+            hooks[node_to_cache] = NodeProxy(node, node_to_cache).hooker
         if len(not_installed_nodes):
             raise NotImplementedError(f"The following nodes are not installed: {', '.join(not_installed_nodes)}")
         return hooks

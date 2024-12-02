@@ -96,7 +96,7 @@ def preprocess(hooks):
         code = code.replace("def main():", f"def main(NODE_CLASS_MAPPINGS, hooks):") \
                     .replace("    import_custom_nodes()", '')
         for hooker in hooks:
-            code = code.replace(f'NODE_CLASS_MAPPINGS["{hooker}"]()', f'hooks["{hooker}"]')
+            code = re.sub(rf"NODE_CLASS_MAPPINGS\[\s*\"{hooker}\"\s*\]\(\)", f'hooks["{hooker}"]', code)
         temp_file = preprocessed_dir / f"appio_{workflow_py.name}"
         temp_file.write_text(code)
         commands.append(workflow_py.stem)
