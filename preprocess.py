@@ -194,7 +194,7 @@ class CommandConfig:
             guide = guide_file.stem
             image_files = [f for ext in file_exts for f in py_workflows_dir.glob(guide + f"*.{ext}")]
             pil_images = [Image.open(image_file) for image_file in image_files]
-            guides[guide] = GuideCommand(guide, display_names[guide], guide_file.read_text(encoding="utf-8"), pil_images)
+            guides[guide] = GuideCommand(guide, display_names.get(guide, guide), guide_file.read_text(encoding="utf-8"), pil_images)
         return guides
         
 def serialize_input_nodes(command: str, id: str, prompt: str, input_nodes: list[InputNode]):
