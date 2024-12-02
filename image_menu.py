@@ -65,8 +65,8 @@ class ImageMenu:
         self.bot = bot
         self.worker = worker
         self.anti_flood = middlewares.get_anti_flood()
-        self.menu_executor = DelayedExecutor(3)
-        self.menu_callback_executor = DelayedExecutor(3)
+        self.menu_executor = DelayedExecutor(2)
+        self.menu_callback_executor = DelayedExecutor(2)
         self.create_handlers()
         self.MAX_NUM_RETRIES = 3
         self.finish_lock = Lock()
@@ -297,11 +297,9 @@ class ImageMenu:
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil, return_original=True):
         with self.finish_lock:
-            pmc.append(
-                self.bot.send_message(
-                    pmc.orig_message.chat.id, 
-                    f"{mention(pmc.orig_message.from_user)} Images are showing up...", parse_mode="Markdown"
-                )
+            self.bot.send_message(
+                pmc.orig_message.chat.id, 
+                f"{mention(pmc.orig_message.from_user)} Images are showing up...", parse_mode="Markdown"
             )
             user_info: UserInfo = AuthManager.allowed_users[str(pmc.orig_message.from_user.id)]
             image_format = IMAGE_FORMAT if user_info.advanced_info else TRIAL_IMAGE_FORMAT

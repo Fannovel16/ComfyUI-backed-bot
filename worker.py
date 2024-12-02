@@ -93,12 +93,12 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
                 not_installed_nodes.append(node_to_cache)
                 continue
             node = self.NODE_CLASS_MAPPINGS[node_to_cache]()
-            def cache_proxy(*arg, **kwargs):
-                if node_to_cache not in NODE_OUTPUT_CACHES:
-                    print(f"Caching node {node_to_cache}...")
-                    NODE_OUTPUT_CACHES[node_to_cache] = getattr(node, node.FUNCTION)(*arg, **kwargs)
-                print(f"Using pre-cached node {node_to_cache}")
-                return NODE_OUTPUT_CACHES[node_to_cache]
+            def cache_proxy(**kwargs):
+                key = f"{node_to_cache}({kwargs})"
+                if key not in NODE_OUTPUT_CACHES:
+                    print(f"Caching node {key}...")
+                    NODE_OUTPUT_CACHES[key] = getattr(node, node.FUNCTION)(**kwargs)
+                return NODE_OUTPUT_CACHES[key]
             hooks[node_to_cache] = SimpleNamespace(**{node.FUNCTION: cache_proxy})
         if len(not_installed_nodes):
             raise NotImplementedError(f"The following nodes are not installed: {', '.join(not_installed_nodes)}")
