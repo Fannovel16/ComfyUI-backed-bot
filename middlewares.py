@@ -5,8 +5,6 @@ import schedule
 import os
 from auth_manager import AuthManager, UserInfo
 
-ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
-
 class AntiFloodMiddleware(BaseMiddleware):
     def __init__(self, bot, commands, free_commands, allowed_chat_ids, start_time, window_limit_sec, temp_message_delay_sec) -> None:
         self.start_time = start_time

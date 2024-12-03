@@ -102,7 +102,7 @@ class ImageMenu:
                 callback_data=f"guide|{id}|{cmd.name}"
             ) for cmd in guide_cmds.values()], row_width=2)
         markup.add(
-            Button(cmd_display_names.get("get_user_info", "Get User Info"), callback_data=f"get_user_info|{id}"),
+            Button(CommandConfig.CONFIG["display_names"].get("get_user_info", "Get User Info"), callback_data=f"get_user_info|{id}"),
             Button("close", callback_data=f"close|{id}"),
             row_width=1)
         reply_text = concat_strings(
@@ -116,8 +116,9 @@ class ImageMenu:
         pmc.append(reply_message)
         def delete_message():
             try: self.bot.delete_message(reply_message.chat.id, reply_message.id)
-            except: pass
-            return schedule.CancelJob
+            except Exception as e:
+                print(f"Can't delete image menu: {e}") 
+            finally: return schedule.CancelJob
         pmc.auto_close_job = schedule.every(30).seconds.do(delete_message)
         PHOTO_MESSAGE_CHAINS[id] = pmc
 
@@ -293,7 +294,7 @@ class ImageMenu:
                     parse_mode="Markdown"
                 )
                 raise e
-            return self.send_photo(orig_message, image_pil, image_format, num_retried)
+            return self.send_photo(orig_message, image_pil, image_format, return_original, num_retried)
 
     def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil, return_original=True):
         with self.finish_lock:

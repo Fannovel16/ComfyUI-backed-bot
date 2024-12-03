@@ -15,6 +15,7 @@ TIMEZONE_DELTA = float(os.environ.get("TIMEZONE_DELTA", "7"))
 LOG_CAPTURE = StringIO()
 ch = logging.StreamHandler(LOG_CAPTURE)
 ch.setLevel(logging.DEBUG)
+ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -80,27 +81,34 @@ def handle_exception(bot: TeleBot, orig_message: Optional[types.Message] = None)
     date_str = utc_time.strftime("%d-%m-%Y_%H.%M.%S")
     error_log_dir = Path(__file__, '..', 'error_logs').resolve()
     error_log_dir.mkdir(exist_ok=True)
+    error_file_path = Path(error_log_dir, f"{date_str}.txt").resolve()
 
     if orig_message is None:
-        Path(error_log_dir, f"{date_str}.txt") \
-        .resolve() \
-        .write_text(
+        error_file_path.write_text(
             traceback.format_exc() \
             + f"\n\nTeleBot's logging: \n{LOG_CAPTURE.getvalue()}",
             encoding="utf-8"
         )
         print(f"Connection error! See {date_str}.txt for more details")
     else:
-        Path(error_log_dir, f"{date_str}.txt") \
-            .resolve() \
-            .write_text(
+        error_file_path.write_text(
                 f"In {orig_message.chat.type} chat {orig_message.chat.title or ''} ({orig_message.chat.id}), user @{get_username(orig_message.from_user)} ({orig_message.from_user.id}) got error:\n" \
                 + traceback.format_exc() \
                 + f"\n\nTeleBot's logging: \n{LOG_CAPTURE.getvalue()}",
                 encoding="utf-8"
             )
-        print(f"Error during command execution. See {date_str} for more details")
+        print(f"Error during command execution. See {date_str}.txt for more details")
         telegram_reply_to(bot, orig_message, f"Error ({date_str}). Please retry again")
+    
+    if len(ADMIN_USER_ID):
+        try:
+            bot.send_document(
+                ADMIN_USER_ID, types.InputFile(error_file_path),
+                caption=f"User @{get_username(orig_message.from_user)} ({orig_message.from_user.id}) got error:"
+                if orig_message is not None else "Connection error"
+            )
+        except:
+            pass
 
 dbm_locks = {}
 def get_dbm(db_name):

@@ -252,7 +252,7 @@ class ComfyWorker:
                 mm.cleanup_models(keep_clone_weights_loaded=True)
                 gc.collect()
                 mm.soft_empty_cache()
-            except Exception:
+            except:
                 handle_exception(self.bot, orig_message)
             finally:
                 set_progress_bar_global_hook(None)

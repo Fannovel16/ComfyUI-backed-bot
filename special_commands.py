@@ -6,7 +6,6 @@ from io import BytesIO
 import os
 from auth_manager import AuthManager, ComfyCommandManager
 
-ADMIN_USER_ID = os.environ.get("ADMIN_USER_ID", '')
 IMAGE_FORMAT = os.environ.get("IMAGE_FORMAT", "png").upper()
 
 def get_full_image_id(user_id, image_id):
