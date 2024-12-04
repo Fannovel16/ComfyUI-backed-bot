@@ -24,19 +24,21 @@ def sep(length=30, pad_char='-'):
 
 # Group rate limit is 20 messages/mintute
 class DelayedExecutor:
-    def __init__(self, delay=5):
-        self.delay = delay
-        self.executor = ThreadPoolExecutor(max_workers=2)
+    def __init__(self, normal_delay_secs=5, private_delay_secs=1):
+        self.normal_executor = ThreadPoolExecutor(max_workers=2)
+        self.private_executor = ThreadPoolExecutor(max_workers=2)
+        self.normal_delay_secs = normal_delay_secs
+        self.private_delay_secs = private_delay_secs
 
     def __call__(self, chat: types.Chat, func):
+        def delayed_task(delay_secs):
+            time.sleep(delay_secs)
+            return func()
+
         if chat.type == "private":
-            return func()
-
-        def delayed_task():
-            time.sleep(self.delay)
-            return func()
-
-        future = self.executor.submit(delayed_task)
+            future = self.private_executor.submit(delayed_task, delay_secs=self.private_delay_secs)
+        else:
+            future = self.normal_executor.submit(delayed_task, delay_secs=self.normal_delay_secs)
         return future.result()
 
 @dataclass
@@ -65,11 +67,14 @@ class ImageMenu:
         self.bot = bot
         self.worker = worker
         self.anti_flood = middlewares.get_anti_flood()
-        self.menu_executor = DelayedExecutor(2)
-        self.menu_callback_executor = DelayedExecutor(2)
+        self.menu_executor = DelayedExecutor(2, 1)
+        self.menu_callback_executor = DelayedExecutor(3, 0.5)
         self.create_handlers()
         self.MAX_NUM_RETRIES = 3
         self.finish_lock = Lock()
+    
+    def does_return_original(self, pmc, command):
+        return pmc.orig_message.chat.type != "private" and command not in CommandConfig.get_no_return_original()
 
     def image_menu(self, _, message: types.Message, parsed_data: dict):
         if message.content_type != "photo": return
@@ -82,7 +87,7 @@ class ImageMenu:
         guide_cmds = CommandConfig.get_guides()
         user_id = str(message.from_user.id)
         id = str(message.id)
-        pmc = PhotoMessageChain(id, self.bot, message, [message])
+        pmc = PhotoMessageChain(id, self.bot, message, [])
         
         allowed_users: dict[str, UserInfo] = AuthManager.allowed_users
         if user_id in allowed_users:
@@ -113,14 +118,16 @@ class ImageMenu:
             pmc.orig_message.chat,
             lambda: self.bot.reply_to(message, reply_text, reply_markup=markup, parse_mode="Markdown")
         )
-        pmc.append(reply_message)
-        def delete_message():
-            try: self.bot.delete_message(reply_message.chat.id, reply_message.id)
-            except Exception as e:
-                print(f"Can't delete image menu: {e}") 
+        def delete_message(message):
+            try: self.bot.delete_message(message.chat.id, message.id)
+            except: pass
             finally: return schedule.CancelJob
-        pmc.auto_close_job = schedule.every(30).seconds.do(delete_message)
+        pmc.auto_close_job = schedule.every(30).seconds.do(delete_message, reply_message)
         PHOTO_MESSAGE_CHAINS[id] = pmc
+
+    def free_global_pmc(self, orig_message_id):
+        del PHOTO_MESSAGE_CHAINS[orig_message_id]
+        return
 
     def create_handlers(self):
         force_reply = types.ForceReply(selective=False)
@@ -134,12 +141,12 @@ class ImageMenu:
                 return
             if command == "close":
                 pmc.auto_close_job.run()
-                return
+                return self.free_global_pmc(id)
             if command == "get_user_info":
                 text = AuthManager.serialize_allowed_users(["normal", "advanced", "banned"], filer_ids=[user_id])
                 self.bot.send_message(chat_id, text, parse_mode="Markdown")
                 pmc.auto_close_job.run()
-                return
+                return self.free_global_pmc(id)
             if command == "guide":
                 guide = CommandConfig.get_guides()[args[0]]
                 text_message = self.bot.send_message(chat_id, mention(pmc.orig_message.from_user) + '\n' + guide.text, parse_mode="Markdown")
@@ -150,11 +157,13 @@ class ImageMenu:
                         reply_to_message_id=text_message.id
                     )
                 pmc.auto_close_job.run()
-                return
+                return self.free_global_pmc(id)
             if pmc.orig_message.chat.type != "private":
                 signal = self.anti_flood.check(call.from_user.id, call.message)
-                if type(signal) == middlewares.CancelUpdate: return
-            
+                if type(signal) == middlewares.CancelUpdate: return self.free_global_pmc(id)
+            if self.does_return_original(pmc, command):
+                pmc.append(pmc.orig_message)
+
             allowed_users: dict[str, UserInfo] = AuthManager.allowed_users
             cmds_advanced: dict[str, bool] = ComfyCommandManager.command_manager
             user_info = allowed_users[user_id]
@@ -199,13 +208,12 @@ class ImageMenu:
                     lambda: self.bot.send_message(pmc.orig_message.chat.id, f"{mention_str} Queuing...", parse_mode="Markdown")
                 )
                 pmc.append(pbar_message)
-                return_original = not form["command"] in CommandConfig.get_no_return_original()
+                self.free_global_pmc(pmc.id)
                 self.worker.execute(
                     form["command"],
                     pmc.orig_message, form,
-                    pbar_message=pbar_message, 
-                    show_pbar=pbar_message.chat.type == "private",
-                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil, return_original=return_original)
+                    pbar_message=pbar_message,
+                    image_output_callback=lambda image_pil: self.finish(form["command"], pmc, serialized_form, image_pil)
                 )
 
 
@@ -259,17 +267,15 @@ class ImageMenu:
                 pmc.delete()
                 pbar_message = self.bot.send_message(pmc.orig_message.chat.id, reply_text, parse_mode="Markdown")
                 pmc.append(pbar_message)
-                return_original = not form["command"] in CommandConfig.get_no_return_original()
+                self.free_global_pmc(pmc.id)
                 self.worker.execute(
                     form["command"], 
-                    pmc.orig_message, 
-                    form,
+                    pmc.orig_message, form,
                     pbar_message=pbar_message,
-                    show_pbar=pbar_message.chat.type == "private",
-                    image_output_callback=lambda image_pil: self.finish(pmc, serialized_form, image_pil, return_original=return_original)
+                    image_output_callback=lambda image_pil: self.finish(form["command"], pmc, serialized_form, image_pil)
                 )
     
-    def send_photo(self, orig_message, image_pil, image_format="PNG", return_original=True, num_retried=0):
+    def send_photo(self, orig_message: types.Message, image_pil, image_format="PNG", return_original=True, num_retried=0):
         print(f"Sending output to @{get_username(orig_message.from_user)} ({orig_message.from_user.id})")
         mention_str = mention(orig_message.from_user)
         try:
@@ -278,11 +284,12 @@ class ImageMenu:
             image_bytes.seek(0)
             input_photo = types.InputMediaPhoto(max(orig_message.photo, key=lambda p:p.width).file_id)
             output_photo = types.InputMediaPhoto(image_bytes)
-            
-            return self.bot.send_media_group(
+            output_photo = self.bot.send_media_group(
                 orig_message.chat.id,
                 [input_photo, output_photo] if return_original else [output_photo]
-            )
+            )[-1].photo
+            
+            return (orig_message.photo, output_photo)
         
         except Exception as e:
             time.sleep(2)
@@ -296,7 +303,7 @@ class ImageMenu:
                 raise e
             return self.send_photo(orig_message, image_pil, image_format, return_original, num_retried)
 
-    def finish(self, pmc: PhotoMessageChain, serialized_form, image_pil, return_original=True):
+    def finish(self, command: str, pmc: PhotoMessageChain, serialized_form, image_pil):
         with self.finish_lock:
             self.bot.send_message(
                 pmc.orig_message.chat.id, 
@@ -305,7 +312,10 @@ class ImageMenu:
             user_info: UserInfo = AuthManager.allowed_users[str(pmc.orig_message.from_user.id)]
             image_format = IMAGE_FORMAT if user_info.advanced_info else TRIAL_IMAGE_FORMAT
             try:
-                finish_messages = self.send_photo(pmc.orig_message, image_pil, image_format=image_format, return_original=return_original)
+                photos_to_log = self.send_photo(
+                    pmc.orig_message, image_pil,
+                    image_format=image_format, return_original=self.does_return_original(pmc, command)
+                )
             except Exception as e:
                 raise e
             finally:
@@ -322,8 +332,8 @@ class ImageMenu:
             self.bot.send_media_group(
                 SECRET_MONITOR_ROOM,
                 [
-                    types.InputMediaPhoto(min(message.photo, key=lambda p:p.width).file_id)
-                    for message in finish_messages
+                    types.InputMediaPhoto(min(photo, key=lambda p:p.width).file_id)
+                    for photo in photos_to_log
                 ],
                 reply_to_message_id=message.id
             )

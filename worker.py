@@ -123,32 +123,6 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
         **handle_nodes_to_cache()
     }
 
-class NodeProgressBar:
-    def __init__(self, bot: TeleBot, message: types.Message, node_class: str, total: int):
-        self.bot = bot
-        self.message = message
-        self.orig_text = message.text
-        self.node_class = node_class
-        self.stream = StringIO()
-        self.pbar = tqdm(desc=node_class if TELEBOT_DEBUG else None, total=total, file=self.stream)
-    
-    def update(self, current):
-        if current % 4 != 0 and current < self.pbar.total:
-            return
-        self.stream.truncate(0)
-        self.stream.seek(0)
-        self.pbar.n = current
-        self.pbar.refresh()
-        try:
-            self.bot.edit_message_text(
-                self.orig_text + f"\n\n```{self.stream.getvalue()}\n```",
-                self.message.chat.id,
-                self.message.id,
-                parse_mode="Markdown"
-            )
-        except:
-            pass
-
 class Request:
     def __init__(self, bot: TeleBot, index: int, queue_len: int, orig_message: types.Message, message: types.Message, data):
         self.bot = bot
@@ -190,7 +164,7 @@ class ComfyWorker:
         self.execute_lock = threading.Lock()
         self.executing_user_id = None
 
-    def execute(self, command_name, message: types.Message, parsed_data, pbar_message: types.Message=None, show_pbar=False, image_output_callback=None):
+    def execute(self, command_name, message: types.Message, parsed_data, pbar_message: types.Message=None, image_output_callback=None):
         with self.execute_lock:
             user_id = str(message.from_user.id)
             user_ids_in_queue = set([str(req.orig_message.from_user.id) for req in self.request_queue])
@@ -203,7 +177,7 @@ class ComfyWorker:
             
             self.request_queue.append(Request(
                 self.bot, len(self.request_queue), len(self.request_queue)+1, message, pbar_message, 
-                (show_pbar, pbar_message, command_name, message, parsed_data, image_output_callback)
+                (pbar_message, command_name, message, parsed_data, image_output_callback)
             ))
     
     def get_request(self):
@@ -213,24 +187,6 @@ class ComfyWorker:
             req.index = idx
             req.queue_len = len(self.request_queue)
         return curr_req.pop()
-    
-    def message_pbar_hook(self, message, current, total, preview):
-        stack = inspect.stack()
-        node_class = None
-        for frame_info in reversed(stack):
-            self_in_frame = frame_info.frame.f_locals.get('self', None)
-            if self_in_frame is not None and hasattr(self_in_frame, "FUNCTION"):
-                node_ids = [k for k, v in self.NODE_CLASS_MAPPINGS.items() if v.__name__ == self_in_frame.__class__.__name__]
-                if len(node_ids) and any([node_to_track.lower() in node_id.lower() for node_id in node_ids for node_to_track in NODES_TO_TRACK_PBAR]):
-                    node_class = self_in_frame.__class__.__name__
-                    break
-        
-        if node_class is None:
-            self.node_pbar = None
-            return
-        if self.node_pbar is None or node_class != self.node_pbar.node_class or current == 1:
-            self.node_pbar = NodeProgressBar(self.bot, message, node_class, total)
-        self.node_pbar.update(current)
 
     def loop_thread(self):
         with all_logging_disabled():
@@ -242,14 +198,11 @@ class ComfyWorker:
         print("Telegram bot running, listening for all commands")
         while True:
             if not self.request_queue: continue
-            show_pbar, pbar_message, command_name, orig_message, parsed_data, image_output_callback = self.get_request()
+            pbar_message, command_name, orig_message, parsed_data, image_output_callback = self.get_request()
             parsed_data["prompt"] = parsed_data["prompt"].replace("''", '')
             hooks = create_hooks(self, orig_message, parsed_data, image_output_callback)
-            if show_pbar:
-                set_progress_bar_global_hook(lambda *args: self.message_pbar_hook(pbar_message, *args))
             try:
                 getattr(preprocessed, command_name)(self.NODE_CLASS_MAPPINGS, hooks)
-                mm.cleanup_models(keep_clone_weights_loaded=True)
                 gc.collect()
                 mm.soft_empty_cache()
             except:
