@@ -135,13 +135,13 @@ class ImageMenu:
         def callback_query(call: types.CallbackQuery):
             command, id, *args = call.data.split('|')
             pmc = PHOTO_MESSAGE_CHAINS.get(id)
-            user_id = str(pmc.orig_message.from_user.id)
-            chat_id = pmc.orig_message.chat.id
             if pmc is None or (call.from_user.id != pmc.orig_message.from_user.id):
                 return
             if command == "close":
                 pmc.auto_close_job.run()
                 return self.free_global_pmc(id)
+            user_id = str(pmc.orig_message.from_user.id)
+            chat_id = pmc.orig_message.chat.id
             if command == "get_user_info":
                 text = AuthManager.serialize_allowed_users(["normal", "advanced", "banned"], filer_ids=[user_id])
                 self.bot.send_message(chat_id, text, parse_mode="Markdown")
