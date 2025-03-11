@@ -12,6 +12,9 @@ import os, gc, inspect
 from telebot import types, TeleBot
 from tqdm import tqdm
 import schedule
+from pathlib import Path
+import cv2
+import tempfile
 
 NODES_TO_CACHE = os.environ.get("NODES_TO_CACHE", '')
 NODE_OUTPUT_CACHES = {}
@@ -21,6 +24,32 @@ IMAGE_FORMAT = os.environ.get("IMAGE_FORMAT", "png").upper()
 
 def get_full_image_id(user_id, image_id):
     return f"{user_id}:{image_id}"
+
+def read_video(byte_stream: BytesIO, suffix: str):
+   # Create a temporary file
+    temp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)  
+    temp_path = temp_file.name  
+
+    try:
+        # Write BytesIO content to the temp file and close it
+        temp_file.write(byte_stream.getvalue())
+        temp_file.close()  # Necessary for Windows!
+
+        # Open video using OpenCV
+        cap = cv2.VideoCapture(temp_path)
+
+        frames = []
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frames.append(frame)
+
+        cap.release()
+
+    finally:
+        os.remove(temp_path)  # Clean up temp file. F.U. Windows
+    return torch.from_numpy(np.stack(frames, axis=0)) / 255.
 
 def create_hooks(self, message: types.Message, parsed_data: dict, image_output_callback):
     def handle_string_input(required, string, argument_name):
@@ -35,11 +64,19 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
         telegram_reply_to(self.bot, message, string)
 
     def handle_image_input(**kwargs):
-        if message.content_type != "photo":
-            raise RuntimeError(f"This command requires an image")
-        file_info = self.bot.get_file(max(message.photo, key=lambda p:p.width).file_id)
-        img = Image.open(BytesIO(self.bot.download_file(file_info.file_path)))
-        return (torch.from_numpy(np.array(img)[:, :, :3]/255.).float().unsqueeze(0),)
+        if message.content_type not in ["photo", "video", "animation"]:
+            raise RuntimeError(f"This command requires an image or video")
+        if message.content_type == "photo":
+            file_id = max(message.photo, key=lambda p:p.width).file_id
+        else:
+            file_id = getattr(message, message.content_type).file_id
+        file_info = self.bot.get_file(file_id)
+        byte_stream = BytesIO(self.bot.download_file(file_info.file_path))
+        if (suffix:=Path(file_info.file_path).suffix.lower()) in [".mp4", ".avi", ".mov", ".mkv"]:
+            return (read_video(byte_stream, suffix),)
+        else:
+            img = Image.open(byte_stream)
+            return (torch.from_numpy(np.array(img)[:, :, :3]/255.).unsqueeze(0),)
     
     def handle_image_input_from_id(argument_name):
         _image_id = parsed_data.get(argument_name, '') or ''
@@ -56,16 +93,21 @@ def create_hooks(self, message: types.Message, parsed_data: dict, image_output_c
                 file_id = image_ids[image_id]
                 file_info = self.bot.get_file(file_id)
 
-        img = Image.open(BytesIO(self.bot.download_file(file_info.file_path)))
-        return (torch.from_numpy(np.array(img)[:, :, :3]/255.).unsqueeze(0),)
+        byte_stream = BytesIO(self.bot.download_file(file_info.file_path))
+        if (suffix:=Path(file_info.file_path).suffix.lower()) in [".mp4", ".avi", ".mov", ".mkv"]:
+            return (read_video(byte_stream, suffix),)
+        else:
+            img = Image.open(byte_stream)
+            return (torch.from_numpy(np.array(img)[:, :, :3]/255.).unsqueeze(0),)
     
     def handle_image_output(image):
-        image_pil = Image.fromarray(image[0, :, :, :3].cpu().numpy().__mul__(255.).astype(np.uint8))
+        image = image[..., :3].cpu().numpy().__mul__(255.).astype(np.uint8)
+        image_pils = [Image.fromarray(img.squeeze(0)) for img in np.split(image, image.shape[0], axis=0)]
         if image_output_callback is not None:
-            image_output_callback(image_pil)
+            image_output_callback(image_pils)
         else:
             image_bytes = BytesIO()
-            image_pil.save(image_bytes, format=IMAGE_FORMAT)
+            image_pils[0].save(image_bytes, format=IMAGE_FORMAT if len(image_pils) == 1 else "GIF", save_all=True, append_images=image_pils[1:])
             image_bytes.seek(0)
             telegram_reply_to(self.bot, message, image_bytes)
     

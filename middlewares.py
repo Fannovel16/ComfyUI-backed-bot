@@ -89,14 +89,14 @@ class AntiFloodMiddleware(BaseMiddleware):
     def pre_process(self, message: types.Message, data):
         user_id = str(message.from_user.id)
         user_name = get_username(message.from_user)
-        text = message.caption if message.content_type == 'photo' else message.text
+        text = message.caption if message.content_type in ['photo', 'video', 'animation'] else message.text
         command = self.get_command(text)
 
         if message.date < self.start_time:
             print(f"Skip message {message.id} from {user_name} ({user_id}) for being sended before starting-up")
             return CancelUpdate()
         
-        if message.content_type == 'photo':
+        if message.content_type in ['photo', 'video', 'animation']:
             if self.authenticate(message):
                 return ContinueHandling()
             else:

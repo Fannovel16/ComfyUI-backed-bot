@@ -42,7 +42,7 @@ def mention(user: types.User, display_user_id=False):
         return f"[@{get_username(user)}](tg://user?id={user.id})"
 
 def telegram_reply_to(bot: TeleBot, message: types.Message, text_or_photo: typing.Union[str, BytesIO]):
-    full_command = message.caption if message.content_type == 'photo' else message.text
+    full_command = message.caption if message.content_type in ['photo', 'video', 'animation'] else message.text
     if full_command is None: full_command = ''
     if isinstance(text_or_photo, str):
         text = text_or_photo

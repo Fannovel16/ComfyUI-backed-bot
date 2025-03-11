@@ -55,10 +55,10 @@ def get_ids(message: types.Message):
         _message = message
     bot.reply_to(message, f"Chat ID: {_message.chat.id}, User ID: {_message.from_user.id}")
 
-@bot.message_handler(func=lambda message: message.reply_to_message is None, content_types=["text", "photo"])
+@bot.message_handler(func=lambda message: message.reply_to_message is None, content_types=["text", "photo", "video", "animation"])
 def main(message: types.Message):
-    text = message.caption if message.content_type == 'photo' else message.text
-    if (message.content_type == 'photo') and (text is None or len(text.strip()) == 0):
+    text = message.caption if message.content_type in ['photo', 'video', 'animation'] else message.text
+    if (message.content_type in ['photo', 'video', 'animation']) and (text is None or len(text.strip()) == 0):
         SPECIAL_COMMANDS["image_menu"](bot, message, {"prompt": ''})
         return
     command_name = text.strip().split()[0][1:] # Extract command name without '/'

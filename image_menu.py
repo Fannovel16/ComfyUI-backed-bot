@@ -77,7 +77,7 @@ class ImageMenu:
         return pmc.orig_message.chat.type != "private" and command not in CommandConfig.get_no_return_original()
 
     def image_menu(self, _, message: types.Message, parsed_data: dict):
-        if message.content_type != "photo": return
+        if message.content_type not in ["photo", "video", "animation"]: return
         if message.chat.type == "private":
             signal = self.anti_flood.check(message.from_user.id, message)
             if type(signal) == middlewares.CancelUpdate: return
@@ -217,7 +217,8 @@ class ImageMenu:
                 )
 
 
-        @self.bot.message_handler(func=lambda message: message.reply_to_message is not None and not (message.text or '').startswith("/get_ids"), content_types=["text", "photo"])
+        @self.bot.message_handler(func=lambda message: message.reply_to_message is not None and not (message.text or '').startswith("/get_ids"), 
+                                  content_types=["text", "photo", "video", "animation"])
         def input_chain(message: types.Message):
             orig_messsage = message.reply_to_message
             text = orig_messsage.text or ''
@@ -228,12 +229,15 @@ class ImageMenu:
             pmc.append(message)
 
             if form_types[query] == "Photo":
-                if message.content_type != "photo":
+                if message.content_type not in ["photo", "video", "animation"]:
                     self.bot.send_message(message.chat.id, "The response is not photo. \nReup the first image and try again")
                     return pmc.delete()
-                form[query] = "TG-" + max(message.photo, key=lambda p:p.width).file_id
+                if message.content_type == "photo":
+                    form[query] = "TG-" + max(message.photo, key=lambda p:p.width).file_id
+                else:
+                    form[query] = "TG-" + getattr(message, message.content_type).file_id
             else:
-                form[query] = message.caption if message.content_type == "photo" else message.text
+                form[query] = message.caption if message.content_type not in ["photo", "video", "animation"] else message.text
             
             remain_keys = list(form.keys())
             remain_keys = remain_keys[remain_keys.index(query)+1:]
@@ -275,21 +279,33 @@ class ImageMenu:
                     image_output_callback=lambda image_pil: self.finish(form["command"], pmc, serialized_form, image_pil)
                 )
     
-    def send_photo(self, orig_message: types.Message, image_pil, image_format="PNG", return_original=True, num_retried=0):
+    def send_photo(self, orig_message: types.Message, image_pils, image_format="PNG", return_original=True, num_retried=0):
         print(f"Sending output to @{get_username(orig_message.from_user)} ({orig_message.from_user.id})")
         mention_str = mention(orig_message.from_user)
         try:
             image_bytes = BytesIO()
-            image_pil.save(image_bytes, format=IMAGE_FORMAT)
+            image_pils[0].save(image_bytes, format=IMAGE_FORMAT if len(image_pils) == 1 else "GIF", save_all=True, append_images=image_pils[1:])
+            
             image_bytes.seek(0)
-            input_photo = types.InputMediaPhoto(max(orig_message.photo, key=lambda p:p.width).file_id)
-            output_photo = types.InputMediaPhoto(image_bytes)
+            if orig_message.content_type == "photo":
+                input_photo = types.InputMediaPhoto(max(orig_message.photo, key=lambda p:p.width).file_id)
+            elif orig_message.content_type == "video":
+                input_photo = types.InputMediaVideo(orig_message.video.file_id)
+            else: # Non-video must become video to be in media group
+                file_info = self.bot.get_file(getattr(orig_message, orig_message.content_type).file_id)
+                byte_stream = BytesIO(self.bot.download_file(file_info.file_path))
+                input_photo = types.InputMediaVideo(byte_stream)
+
+            output_photo = types.InputMediaPhoto(image_bytes) if len(image_pils) == 1 else types.InputMediaVideo(image_bytes)
             output_photo = self.bot.send_media_group(
                 orig_message.chat.id,
                 [input_photo, output_photo] if return_original else [output_photo]
-            )[-1].photo
-            
-            return (orig_message.photo, output_photo)
+            )[-1]
+            if output_photo.content_type == "photo":
+                output_photo = types.InputMediaPhoto(max(output_photo.photo, key=lambda p:p.width).file_id)
+            else:
+                output_photo = types.InputMediaVideo(getattr(output_photo, output_photo.content_type).file_id)
+            return [input_photo, output_photo]
         
         except Exception as e:
             time.sleep(2)
@@ -301,7 +317,7 @@ class ImageMenu:
                     parse_mode="Markdown"
                 )
                 raise e
-            return self.send_photo(orig_message, image_pil, image_format, return_original, num_retried)
+            return self.send_photo(orig_message, image_pils, image_format, return_original, num_retried)
 
     def finish(self, command: str, pmc: PhotoMessageChain, serialized_form, image_pil):
         with self.finish_lock:
@@ -331,9 +347,6 @@ class ImageMenu:
             message = self.bot.send_message(SECRET_MONITOR_ROOM, finish_text_full, parse_mode="Markdown")
             self.bot.send_media_group(
                 SECRET_MONITOR_ROOM,
-                [
-                    types.InputMediaPhoto(min(photo, key=lambda p:p.width).file_id)
-                    for photo in photos_to_log
-                ],
+                photos_to_log,
                 reply_to_message_id=message.id
             )
